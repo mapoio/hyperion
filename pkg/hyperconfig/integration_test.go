@@ -3,6 +3,7 @@ package hyperconfig
 import (
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,11 +48,11 @@ database:
 	assert.Equal(t, 100, provider.GetInt("database.max_connections"))
 
 	// Set up watch callback with change tracking
-	changeCount := 0
+	var changeCount atomic.Int32
 	changesDetected := make(chan bool, 10)
 
 	stop, err := provider.Watch(func(event ChangeEvent) {
-		changeCount++
+		changeCount.Add(1)
 		changesDetected <- true
 	})
 	require.NoError(t, err)
@@ -118,7 +119,7 @@ database:
 	assert.Equal(t, 200, provider.GetInt("database.max_connections"))
 
 	// Verify multiple callbacks were triggered
-	assert.GreaterOrEqual(t, changeCount, 2, "should have detected at least 2 config changes")
+	assert.GreaterOrEqual(t, int(changeCount.Load()), 2, "should have detected at least 2 config changes")
 }
 
 // TestIntegration_MultipleComponentsWatching tests the scenario where
@@ -226,11 +227,11 @@ func TestIntegration_StopWatchingDuringOperation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start watching
-	notificationCount := 0
+	var notificationCount atomic.Int32
 	notifications := make(chan bool, 10)
 
 	stop, err := provider.Watch(func(event ChangeEvent) {
-		notificationCount++
+		notificationCount.Add(1)
 		notifications <- true
 	})
 	require.NoError(t, err)
@@ -260,7 +261,7 @@ func TestIntegration_StopWatchingDuringOperation(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Should have received exactly 1 notification
-	assert.Equal(t, 1, notificationCount, "should only receive notification before stop")
+	assert.Equal(t, int32(1), notificationCount.Load(), "should only receive notification before stop")
 }
 
 // TestIntegration_ComplexConfigStructure tests hot reload with nested
