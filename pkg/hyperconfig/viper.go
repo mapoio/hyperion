@@ -258,8 +258,11 @@ func (p *ViperProvider) handleFileEvent(event fsnotify.Event) {
 	if event.Op&(fsnotify.Rename|fsnotify.Remove) != 0 {
 		p.mu.Lock()
 		if p.watcher != nil {
-			// Remove the old watch (if it exists)
-			_ = p.watcher.Remove(p.configPath)
+			// Remove the old watch (if it exists) - ignore error as path may not exist
+			if err := p.watcher.Remove(p.configPath); err != nil {
+				// Log but continue - the path may have already been removed
+				fmt.Printf("note: failed to remove old watch (expected after rename): %v\n", err)
+			}
 			// Re-add watch to the config path (which now points to the new file)
 			if err := p.watcher.Add(p.configPath); err != nil {
 				fmt.Printf("failed to re-add watch after rename: %v\n", err)

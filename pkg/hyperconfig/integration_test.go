@@ -185,18 +185,38 @@ service_b:
 	require.NoError(t, err)
 
 	// Both services should be notified
+	// Note: May receive multiple events (Write, Rename, etc.) so drain all notifications
 	timeout := time.After(5 * time.Second)
 	aNotified := false
 	bNotified := false
 
-	for i := 0; i < 2; i++ {
+waitLoop:
+	for {
 		select {
 		case <-serviceANotified:
 			aNotified = true
+			if aNotified && bNotified {
+				break waitLoop
+			}
 		case <-serviceBNotified:
 			bNotified = true
+			if aNotified && bNotified {
+				break waitLoop
+			}
 		case <-timeout:
-			t.Fatal("not all services notified of config change")
+			t.Fatalf("not all services notified of config change (A=%v, B=%v)", aNotified, bNotified)
+		}
+	}
+
+	// Drain any additional events
+	time.Sleep(100 * time.Millisecond)
+drainLoop:
+	for {
+		select {
+		case <-serviceANotified:
+		case <-serviceBNotified:
+		default:
+			break drainLoop
 		}
 	}
 
