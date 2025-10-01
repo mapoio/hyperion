@@ -244,10 +244,30 @@ func (p *ViperProvider) watchLoop() {
 }
 
 // handleFileEvent processes a file system event and triggers callbacks.
+// Handles atomic writes (rename/remove) used by editors and k8s ConfigMaps.
 func (p *ViperProvider) handleFileEvent(event fsnotify.Event) {
-	// Only process write and create events
-	if event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
+	// Handle atomic writes: many editors and k8s ConfigMap reloads use
+	// atomic writes (write to temp file, then rename), which triggers
+	// Rename or Remove events instead of Write.
+	if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename|fsnotify.Remove) == 0 {
 		return
+	}
+
+	// For rename/remove events, re-add the watch to handle atomic writes
+	// The watch stays on the old inode after rename, so we need to watch the new file
+	if event.Op&(fsnotify.Rename|fsnotify.Remove) != 0 {
+		p.mu.Lock()
+		if p.watcher != nil {
+			// Remove the old watch (if it exists)
+			_ = p.watcher.Remove(p.configPath)
+			// Re-add watch to the config path (which now points to the new file)
+			if err := p.watcher.Add(p.configPath); err != nil {
+				fmt.Printf("failed to re-add watch after rename: %v\n", err)
+				p.mu.Unlock()
+				return
+			}
+		}
+		p.mu.Unlock()
 	}
 
 	// Reload configuration with write lock

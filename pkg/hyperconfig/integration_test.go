@@ -391,3 +391,86 @@ database:
 	assert.Equal(t, 100, newAppConfig.Database.MaxConnections)
 	assert.Equal(t, 600, newAppConfig.Database.MaxIdleTime)
 }
+
+// TestIntegration_AtomicWriteSupport tests that the watcher properly handles
+// atomic writes (write to temp file, then rename) used by many editors and
+// Kubernetes ConfigMap updates.
+func TestIntegration_AtomicWriteSupport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	initialConfig := `
+value: initial
+count: 1
+`
+	err := os.WriteFile(configPath, []byte(initialConfig), 0o644)
+	require.NoError(t, err)
+
+	provider, err := NewViperProvider(configPath)
+	require.NoError(t, err)
+
+	// Verify initial config
+	assert.Equal(t, "initial", provider.GetString("value"))
+	assert.Equal(t, 1, provider.GetInt("count"))
+
+	// Watch for changes
+	var changeCount atomic.Int32
+	changesDetected := make(chan bool, 10)
+
+	stop, err := provider.Watch(func(event ChangeEvent) {
+		changeCount.Add(1)
+		changesDetected <- true
+	})
+	require.NoError(t, err)
+	defer stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Simulate atomic write (like editors and k8s ConfigMap do):
+	// 1. Write to temporary file
+	// 2. Rename temp file to target file
+	tmpFile := filepath.Join(tmpDir, "config.yaml.tmp")
+	updatedConfig := `
+value: atomic-updated
+count: 42
+`
+	err = os.WriteFile(tmpFile, []byte(updatedConfig), 0o644)
+	require.NoError(t, err)
+
+	// Atomic rename (this is what triggers Rename/Remove events)
+	err = os.Rename(tmpFile, configPath)
+	require.NoError(t, err)
+
+	// Wait for change detection
+	select {
+	case <-changesDetected:
+		// Change detected
+	case <-time.After(5 * time.Second):
+		t.Fatal("atomic write not detected")
+	}
+
+	// Verify the change was applied
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, "atomic-updated", provider.GetString("value"))
+	assert.Equal(t, 42, provider.GetInt("count"))
+
+	// Verify that subsequent changes still work after atomic write
+	err = os.WriteFile(configPath, []byte("value: second-update\ncount: 99\n"), 0o644)
+	require.NoError(t, err)
+
+	select {
+	case <-changesDetected:
+		// Second change detected
+	case <-time.After(5 * time.Second):
+		t.Fatal("second update after atomic write not detected")
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, "second-update", provider.GetString("value"))
+	assert.Equal(t, 99, provider.GetInt("count"))
+	assert.GreaterOrEqual(t, int(changeCount.Load()), 2, "should detect both atomic write and regular write")
+}
