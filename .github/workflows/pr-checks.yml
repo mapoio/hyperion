@@ -83,11 +83,14 @@ jobs:
 
       - name: Validate commit messages
         run: |
-          # Get all commits in this PR
-          commits=$(git log --format=%s origin/main..HEAD)
+          # Get all commits in this PR (exclude merge commits)
+          commits=$(git log --format=%s --no-merges origin/main..HEAD)
 
           # Simple validation - check for conventional commit format
           while IFS= read -r commit; do
+            # Skip empty lines
+            [ -z "$commit" ] && continue
+
             if ! echo "$commit" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+'; then
               echo "❌ Invalid commit message: $commit"
               echo "Expected format: type(scope): description"
@@ -108,7 +111,10 @@ jobs:
 
       - name: Check for conflict markers
         run: |
-          conflicts=$(grep -r "<<<<<<< HEAD" . --exclude-dir=.git --exclude-dir=vendor || true)
+          CONFLICT_START="<""<""<""<""<""<""< HEAD"
+          CONFLICT_MID="=""=""=""=""=""=""="
+          CONFLICT_END=">">">">">">"">"
+          conflicts=$(grep -rE "($CONFLICT_START|$CONFLICT_MID|$CONFLICT_END)" . --exclude-dir=.git --exclude-dir=vendor || true)
           if [ -n "$conflicts" ]; then
             echo "❌ Merge conflict markers detected:"
             echo "$conflicts"

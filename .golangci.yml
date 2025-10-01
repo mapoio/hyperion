@@ -38,7 +38,7 @@ linters:
     - dogsled       # 检查空白标识符的赋值
     - dupl          # 检查代码重复
     - errorlint     # 检查错误包装
-    - exportloopref # 检查循环变量引用
+    # - exportloopref # Deprecated since Go 1.22 - loop variable semantics changed
     - gocritic      # 提供大量检查规则
     - goprintffuncname # 检查 printf 风格函数命名
     - gosec         # 安全检查

@@ -2,73 +2,101 @@
 
 # Core components
 'component: hyperconfig':
-  - pkg/hyperconfig/**/*
-  - docs/stories/*hyperconfig*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperconfig/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperconfig*'
 
 'component: hyperlog':
-  - pkg/hyperlog/**/*
-  - docs/stories/*hyperlog*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperlog/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperlog*'
 
 'component: hyperctx':
-  - pkg/hyperctx/**/*
-  - docs/stories/*hyperctx*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperctx/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperctx*'
 
 'component: hyperdb':
-  - pkg/hyperdb/**/*
-  - docs/stories/*hyperdb*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperdb/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperdb*'
 
 'component: hypercache':
-  - pkg/hypercache/**/*
-  - docs/stories/*hypercache*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypercache/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypercache*'
 
 'component: hyperweb':
-  - pkg/hyperweb/**/*
-  - docs/stories/*hyperweb*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperweb/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperweb*'
 
 'component: hypergrpc':
-  - pkg/hypergrpc/**/*
-  - docs/stories/*hypergrpc*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypergrpc/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypergrpc*'
 
 'component: hyperhttp':
-  - pkg/hyperhttp/**/*
-  - docs/stories/*hyperhttp*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperhttp/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperhttp*'
 
 'component: hyperstore':
-  - pkg/hyperstore/**/*
-  - docs/stories/*hyperstore*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperstore/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperstore*'
 
 'component: hypercrypto':
-  - pkg/hypercrypto/**/*
-  - docs/stories/*hypercrypto*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypercrypto/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypercrypto*'
 
 'component: hypererror':
-  - pkg/hypererror/**/*
-  - docs/stories/*hypererror*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypererror/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypererror*'
 
 'component: hypervalidator':
-  - pkg/hypervalidator/**/*
-  - docs/stories/*hypervalidator*
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypervalidator/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypervalidator*'
 
 # Change types
 'type: documentation':
-  - docs/**/*
-  - '**/*.md'
-  - README.md
-  - CHANGELOG.md
-  - CONTRIBUTING.md
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*.md'
 
 'type: tests':
-  - '**/*_test.go'
-  - '**/integration_test.go'
+  - changed-files:
+    - any-glob-to-any-file: '**/*_test.go'
 
 'type: ci':
-  - .github/**/*
-  - .golangci.yml
-  - Makefile
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
+  - changed-files:
+    - any-glob-to-any-file: '.golangci.yml'
+  - changed-files:
+    - any-glob-to-any-file: 'Makefile'
 
 'type: dependencies':
-  - go.mod
-  - go.sum
+  - changed-files:
+    - any-glob-to-any-file: 'go.mod'
+  - changed-files:
+    - any-glob-to-any-file: 'go.sum'
 
 # Size labels
 'size: small':
