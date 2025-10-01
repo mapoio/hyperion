@@ -1,0 +1,88 @@
+# Label configuration for auto-labeling PRs based on file changes
+
+# Core components
+'component: hyperconfig':
+  - pkg/hyperconfig/**/*
+  - docs/stories/*hyperconfig*
+
+'component: hyperlog':
+  - pkg/hyperlog/**/*
+  - docs/stories/*hyperlog*
+
+'component: hyperctx':
+  - pkg/hyperctx/**/*
+  - docs/stories/*hyperctx*
+
+'component: hyperdb':
+  - pkg/hyperdb/**/*
+  - docs/stories/*hyperdb*
+
+'component: hypercache':
+  - pkg/hypercache/**/*
+  - docs/stories/*hypercache*
+
+'component: hyperweb':
+  - pkg/hyperweb/**/*
+  - docs/stories/*hyperweb*
+
+'component: hypergrpc':
+  - pkg/hypergrpc/**/*
+  - docs/stories/*hypergrpc*
+
+'component: hyperhttp':
+  - pkg/hyperhttp/**/*
+  - docs/stories/*hyperhttp*
+
+'component: hyperstore':
+  - pkg/hyperstore/**/*
+  - docs/stories/*hyperstore*
+
+'component: hypercrypto':
+  - pkg/hypercrypto/**/*
+  - docs/stories/*hypercrypto*
+
+'component: hypererror':
+  - pkg/hypererror/**/*
+  - docs/stories/*hypererror*
+
+'component: hypervalidator':
+  - pkg/hypervalidator/**/*
+  - docs/stories/*hypervalidator*
+
+# Change types
+'type: documentation':
+  - docs/**/*
+  - '**/*.md'
+  - README.md
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+
+'type: tests':
+  - '**/*_test.go'
+  - '**/integration_test.go'
+
+'type: ci':
+  - .github/**/*
+  - .golangci.yml
+  - Makefile
+
+'type: dependencies':
+  - go.mod
+  - go.sum
+
+# Size labels
+'size: small':
+  - changed-files:
+    - count: 1-10
+
+'size: medium':
+  - changed-files:
+    - count: 11-50
+
+'size: large':
+  - changed-files:
+    - count: 51-100
+
+'size: x-large':
+  - changed-files:
+    - count: 101-500
