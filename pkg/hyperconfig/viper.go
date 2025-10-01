@@ -177,7 +177,10 @@ func (p *ViperProvider) Watch(callback func(event ChangeEvent)) (stop func(), er
 
 		// Add the config file to the watcher
 		if err := watcher.Add(p.configPath); err != nil {
-			watcher.Close()
+			if closeErr := watcher.Close(); closeErr != nil {
+				// Log close error but prioritize returning the original error
+				fmt.Printf("failed to close watcher: %v\n", closeErr)
+			}
 			delete(p.callbacks, callbackID)
 			return nil, fmt.Errorf("failed to watch config file: %w", err)
 		}
@@ -199,7 +202,10 @@ func (p *ViperProvider) Watch(callback func(event ChangeEvent)) (stop func(), er
 		// If this was the last callback, stop watching
 		if len(p.callbacks) == 0 && p.watcher != nil {
 			close(p.watchDone)
-			p.watcher.Close()
+			if err := p.watcher.Close(); err != nil {
+				// Log error but continue cleanup (non-critical)
+				fmt.Printf("failed to close watcher: %v\n", err)
+			}
 			p.watcher = nil
 			p.watchDone = nil
 		}
