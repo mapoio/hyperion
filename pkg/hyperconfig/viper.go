@@ -19,6 +19,9 @@ type ViperProvider struct {
 	callbacks  map[uint64]func(ChangeEvent)
 	mu         sync.RWMutex
 	nextCallID uint64
+	configPath string              // Original config file path
+	watcher    *fsnotify.Watcher   // File system watcher
+	watchDone  chan struct{}       // Signal to stop watching
 }
 
 // NewViperProvider creates a new ViperProvider from the given configuration file path.
@@ -50,6 +53,7 @@ func NewViperProvider(configPath string) (*ViperProvider, error) {
 		v:          v,
 		callbacks:  make(map[uint64]func(ChangeEvent)),
 		nextCallID: 0,
+		configPath: configPath,
 	}, nil
 }
 
@@ -141,7 +145,7 @@ func (p *ViperProvider) AllKeys() []string {
 }
 
 // Watch starts watching for configuration file changes and triggers callbacks.
-// It uses fsnotify internally via viper's WatchConfig mechanism.
+// It uses fsnotify to watch the configuration file directly.
 //
 // The callback is invoked whenever the configuration file is modified.
 // Note: The ChangeEvent.Key will contain the filename and Value will be nil for
@@ -164,32 +168,106 @@ func (p *ViperProvider) Watch(callback func(event ChangeEvent)) (stop func(), er
 
 	// Only set up watching once (when first callback is registered)
 	if len(p.callbacks) == 1 {
-		p.v.WatchConfig()
-		p.v.OnConfigChange(func(e fsnotify.Event) {
-			p.mu.RLock()
-			// Create a snapshot of callbacks to avoid holding lock during execution
-			callbacks := make([]func(ChangeEvent), 0, len(p.callbacks))
-			for _, cb := range p.callbacks {
-				callbacks = append(callbacks, cb)
-			}
-			p.mu.RUnlock()
+		// Create a new file system watcher
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			delete(p.callbacks, callbackID)
+			return nil, fmt.Errorf("failed to create watcher: %w", err)
+		}
 
-			// Trigger all registered callbacks
-			event := ChangeEvent{
-				Key:   filepath.Base(e.Name),
-				Value: nil, // File-level change, not specific key
-			}
+		// Add the config file to the watcher
+		if err := watcher.Add(p.configPath); err != nil {
+			watcher.Close()
+			delete(p.callbacks, callbackID)
+			return nil, fmt.Errorf("failed to watch config file: %w", err)
+		}
 
-			for _, cb := range callbacks {
-				cb(event)
-			}
-		})
+		p.watcher = watcher
+		p.watchDone = make(chan struct{})
+
+		// Start the watch loop in a separate goroutine
+		go p.watchLoop()
 	}
 
 	// Return stop function that removes this specific callback by ID
 	return func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
+
 		delete(p.callbacks, callbackID)
+
+		// If this was the last callback, stop watching
+		if len(p.callbacks) == 0 && p.watcher != nil {
+			close(p.watchDone)
+			p.watcher.Close()
+			p.watcher = nil
+			p.watchDone = nil
+		}
 	}, nil
+}
+
+// watchLoop handles file system events and reloads configuration.
+// It runs in a separate goroutine and terminates when watchDone is closed.
+func (p *ViperProvider) watchLoop() {
+	// Get channels with lock to avoid races during shutdown
+	p.mu.RLock()
+	eventsC := p.watcher.Events
+	errorsC := p.watcher.Errors
+	doneC := p.watchDone
+	p.mu.RUnlock()
+
+	for {
+		select {
+		case event, ok := <-eventsC:
+			if !ok {
+				return
+			}
+
+			// Only process write and create events
+			if event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
+				continue
+			}
+
+			// Reload configuration with write lock to prevent races with Get methods
+			p.mu.Lock()
+
+			// Reload the configuration file
+			if err := p.v.ReadInConfig(); err != nil {
+				// Log error but continue watching (in production, use proper logger)
+				fmt.Printf("failed to reload config: %v\n", err)
+				p.mu.Unlock()
+				continue
+			}
+
+			// Create change event
+			changeEvent := ChangeEvent{
+				Key:   filepath.Base(event.Name),
+				Value: nil, // File-level change, not specific key
+			}
+
+			// Create a snapshot of callbacks while holding lock
+			callbacks := make([]func(ChangeEvent), 0, len(p.callbacks))
+			for _, cb := range p.callbacks {
+				callbacks = append(callbacks, cb)
+			}
+
+			// Release lock before executing callbacks to allow callbacks to call Get methods
+			p.mu.Unlock()
+
+			// Execute all callbacks
+			for _, cb := range callbacks {
+				cb(changeEvent)
+			}
+
+		case err, ok := <-errorsC:
+			if !ok {
+				return
+			}
+			// Log error but continue watching (in production, use proper logger)
+			fmt.Printf("watcher error: %v\n", err)
+
+		case <-doneC:
+			return
+		}
+	}
 }
