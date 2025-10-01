@@ -242,26 +242,45 @@ func TestIntegration_StopWatchingDuringOperation(t *testing.T) {
 	err = os.WriteFile(configPath, []byte("key: value2"), 0o644)
 	require.NoError(t, err)
 
-	// Wait for first notification
+	// Wait for at least one notification (may receive multiple due to file system events)
 	select {
 	case <-notifications:
-		// Received
+		// Received at least one
 	case <-time.After(5 * time.Second):
 		t.Fatal("first notification not received")
 	}
 
+	// Drain any additional notifications from the first write (CREATE + WRITE events)
+	time.Sleep(200 * time.Millisecond)
+drainLoop:
+	for {
+		select {
+		case <-notifications:
+			// Drain
+		default:
+			break drainLoop
+		}
+	}
+
+	// Record count before stop
+	countBeforeStop := notificationCount.Load()
+
 	// Stop watching
 	stop()
+
+	// Give watcher time to fully stop
+	time.Sleep(200 * time.Millisecond)
 
 	// Trigger second change - should NOT notify
 	err = os.WriteFile(configPath, []byte("key: value3"), 0o644)
 	require.NoError(t, err)
 
-	// Wait a bit to ensure no notification
+	// Wait to ensure no new notification
 	time.Sleep(1 * time.Second)
 
-	// Should have received exactly 1 notification
-	assert.Equal(t, int32(1), notificationCount.Load(), "should only receive notification before stop")
+	// Count should not have increased after stop
+	countAfterStop := notificationCount.Load()
+	assert.Equal(t, countBeforeStop, countAfterStop, "should not receive notifications after stop")
 }
 
 // TestIntegration_ComplexConfigStructure tests hot reload with nested
