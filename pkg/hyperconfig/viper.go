@@ -15,13 +15,13 @@ import (
 // It supports multiple configuration formats (YAML, JSON, TOML) and
 // automatic environment variable override.
 type ViperProvider struct {
-	v          *viper.Viper
-	callbacks  map[uint64]func(ChangeEvent)
-	mu         sync.RWMutex
-	nextCallID uint64
-	configPath string              // Original config file path
-	watcher    *fsnotify.Watcher   // File system watcher
-	watchDone  chan struct{}       // Signal to stop watching
+	v          *viper.Viper                 // Viper instance
+	watcher    *fsnotify.Watcher            // File system watcher
+	callbacks  map[uint64]func(ChangeEvent) // Registered callbacks
+	watchDone  chan struct{}                // Signal to stop watching
+	configPath string                       // Original config file path
+	mu         sync.RWMutex                 // Protects callbacks and viper access
+	nextCallID uint64                       // Atomic counter for callback IDs
 }
 
 // NewViperProvider creates a new ViperProvider from the given configuration file path.
@@ -222,42 +222,7 @@ func (p *ViperProvider) watchLoop() {
 			if !ok {
 				return
 			}
-
-			// Only process write and create events
-			if event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
-				continue
-			}
-
-			// Reload configuration with write lock to prevent races with Get methods
-			p.mu.Lock()
-
-			// Reload the configuration file
-			if err := p.v.ReadInConfig(); err != nil {
-				// Log error but continue watching (in production, use proper logger)
-				fmt.Printf("failed to reload config: %v\n", err)
-				p.mu.Unlock()
-				continue
-			}
-
-			// Create change event
-			changeEvent := ChangeEvent{
-				Key:   filepath.Base(event.Name),
-				Value: nil, // File-level change, not specific key
-			}
-
-			// Create a snapshot of callbacks while holding lock
-			callbacks := make([]func(ChangeEvent), 0, len(p.callbacks))
-			for _, cb := range p.callbacks {
-				callbacks = append(callbacks, cb)
-			}
-
-			// Release lock before executing callbacks to allow callbacks to call Get methods
-			p.mu.Unlock()
-
-			// Execute all callbacks
-			for _, cb := range callbacks {
-				cb(changeEvent)
-			}
+			p.handleFileEvent(event)
 
 		case err, ok := <-errorsC:
 			if !ok {
@@ -269,5 +234,39 @@ func (p *ViperProvider) watchLoop() {
 		case <-doneC:
 			return
 		}
+	}
+}
+
+// handleFileEvent processes a file system event and triggers callbacks.
+func (p *ViperProvider) handleFileEvent(event fsnotify.Event) {
+	// Only process write and create events
+	if event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
+		return
+	}
+
+	// Reload configuration with write lock
+	p.mu.Lock()
+	if err := p.v.ReadInConfig(); err != nil {
+		fmt.Printf("failed to reload config: %v\n", err)
+		p.mu.Unlock()
+		return
+	}
+
+	// Create change event
+	changeEvent := ChangeEvent{
+		Key:   filepath.Base(event.Name),
+		Value: nil,
+	}
+
+	// Snapshot callbacks while holding lock
+	callbacks := make([]func(ChangeEvent), 0, len(p.callbacks))
+	for _, cb := range p.callbacks {
+		callbacks = append(callbacks, cb)
+	}
+	p.mu.Unlock()
+
+	// Execute callbacks outside lock
+	for _, cb := range callbacks {
+		cb(changeEvent)
 	}
 }
