@@ -98,29 +98,5 @@
   - changed-files:
     - any-glob-to-any-file: 'go.sum'
 
-# Size labels (based on number of changed files)
-'size: small':
-  - changed-files:
-    - any-glob-to-any-file: '**/*'
-      count:
-        lte: 10
-
-'size: medium':
-  - changed-files:
-    - any-glob-to-any-file: '**/*'
-      count:
-        gte: 11
-        lte: 50
-
-'size: large':
-  - changed-files:
-    - any-glob-to-any-file: '**/*'
-      count:
-        gte: 51
-        lte: 100
-
-'size: x-large':
-  - changed-files:
-    - any-glob-to-any-file: '**/*'
-      count:
-        gte: 101
+# Note: Size labels based on file count are not supported by actions/labeler@v5
+# Consider using a separate action like 'Changed Lines Count Labeler' if needed
