@@ -1,0 +1,245 @@
+# golangci-lint configuration for Hyperion
+# References:
+# - https://golangci-lint.run/usage/configuration/
+# - https://github.com/uber-go/guide/blob/master/style.md
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+output:
+  formats:
+    # - format: colored-line-number
+    text:
+      print-issued-lines: true
+      print-linter-name: true
+
+linters:
+  enable:
+    # Default linters
+    - errcheck      # 检查未处理的错误
+    - gosimple      # 简化代码
+    - govet         # 标准 Go 工具
+    - ineffassign   # 检测无效赋值
+    - staticcheck   # 静态分析
+    - unused        # 检查未使用的常量、变量、函数和类型
+
+    # Additional recommended linters
+    - gofmt         # 检查代码格式
+    - goimports     # 检查 import 格式
+    - revive        # 替代 golint 的 linter
+    - misspell      # 检查拼写错误
+    - unconvert     # 移除不必要的类型转换
+    - gocyclo       # 检查函数复杂度
+    - goconst       # 查找可以替换为常量的重复字符串
+    - gocognit      # 计算认知复杂度
+    - bodyclose     # 检查 HTTP body 是否关闭
+    - depguard      # 检查依赖包是否在允许列表中
+    - dogsled       # 检查空白标识符的赋值
+    - dupl          # 检查代码重复
+    - errorlint     # 检查错误包装
+    - exportloopref # 检查循环变量引用
+    - gocritic      # 提供大量检查规则
+    - goprintffuncname # 检查 printf 风格函数命名
+    - gosec         # 安全检查
+    - nakedret      # 检查裸返回
+    - nolintlint    # 检查 nolint 指令
+    - prealloc      # 查找可以预分配的切片
+    - rowserrcheck  # 检查 sql.Rows.Err
+    - sqlclosecheck # 检查 sql.Rows 和 sql.Stmt 是否关闭
+    - stylecheck    # 代码风格检查
+    - typecheck     # 类型检查
+    - unparam       # 检查未使用的函数参数
+    - whitespace    # 检查不必要的空白
+    - wsl           # 强制空行规则
+    - gomodguard    # 检查 go.mod 中的依赖
+    - godot         # 检查注释是否以句号结尾
+    - nestif        # 检查嵌套深度
+    - nilerr        # 检查返回 nil 但 error 不为 nil 的情况
+
+  disable:
+    - funlen        # 函数长度检查（太严格）
+    - lll           # 行长度检查（太严格）
+    - gochecknoglobals # 全局变量检查（框架需要全局变量）
+    - gochecknoinits   # init 函数检查（框架需要 init）
+
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - goconst
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+          - goconst
+          - gocognit
+          - bodyclose
+
+      # Exclude some linters from running on mock files
+      - path: mock_.*\.go
+        linters:
+          - revive
+          - stylecheck
+
+      # Exclude fx module definitions from unused checks
+      - path: module\.go
+        linters:
+          - unused
+
+      # Allow package comments only in doc.go
+      - linters:
+          - revive
+        text: "package-comments"
+        path-except: doc\.go
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Stmt).Close
+
+    govet:
+      enable-all: true
+      settings:
+        shadow:
+          strict: false
+
+    revive:
+      confidence: 0.8
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocyclo:
+      min-complexity: 15
+
+    gocognit:
+      min-complexity: 20
+
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+
+    misspell:
+      locale: US
+
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: "Use os or io package instead of deprecated io/ioutil"
+            - pkg: github.com/pkg/errors
+              desc: "Use fmt.Errorf with %w for error wrapping"
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+        - experimental
+        - opinionated
+      disabled-checks:
+        - whyNoLint
+        - hugeParam
+
+    gosec:
+      excludes:
+        - G104 # 审计未检查的错误（由 errcheck 处理）
+      config:
+        G301: "0750"
+        G302: "0640"
+        G306: "0640"
+
+    nestif:
+      min-complexity: 5
+
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+      dot-import-whitelist:
+        - fmt
+      initialisms: ["ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "URL", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS", "OAuth"]
+      http-status-code-whitelist: []
+
+    unparam:
+      check-exported: false
+
+    whitespace:
+      multi-if: false
+      multi-func: false
+
+    wsl:
+      strict-append: true
+      allow-assign-and-call: true
+      allow-multiline-assign: true
+      allow-cuddle-declarations: false
+      allow-trailing-comment: false
+      force-case-trailing-whitespace: 0
+      force-err-cuddling: false
+      allow-separated-leading-comment: false
+
+    gomodguard:
+      blocked:
+        modules:
+          - github.com/golang/protobuf:
+              recommendations:
+                - google.golang.org/protobuf
+              reason: "Use the new protobuf module"
+          - io/ioutil:
+              recommendations:
+                - os
+                - io
+              reason: "Deprecated since Go 1.16"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+
+formatters:
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+       - github.com/mapoio/hyperion
+
+severity:
+  default: error
+  rules:
+    - linters:
+        - revive
+      severity: warning
+    - linters:
+        - stylecheck
+      severity: warning

@@ -1,0 +1,44 @@
+# <type>(<scope>): <subject>
+# |<----  Using a Maximum Of 50 Characters  ---->|
+
+# Explain why this change is being made
+# |<----   Try To Limit Each Line to a Maximum Of 72 Characters   ---->|
+
+# Provide links or keys to any relevant tickets, articles or other resources
+# Example: Github issue #23
+
+# --- COMMIT END ---
+# Type can be:
+#   feat     (new feature)
+#   fix      (bug fix)
+#   docs     (changes to documentation)
+#   style    (formatting, missing semi colons, etc; no code change)
+#   refactor (refactoring production code)
+#   perf     (performance improvements)
+#   test     (adding missing tests, refactoring tests; no production code change)
+#   build    (changes that affect the build system or external dependencies)
+#   ci       (changes to CI configuration files and scripts)
+#   chore    (updating grunt tasks etc; no production code change)
+#   revert   (revert a previous commit)
+# --------------------
+# Scope is optional and can be anything specifying the place of the commit change.
+# For example: hyperlog, hyperdb, hyperweb, hypergrpc, etc.
+# --------------------
+# Subject should use imperative tone and say what you did.
+# Examples: "add logging", "fix bug in user service"
+# NOT: "added logging", "fixing bug"
+# --------------------
+# Body should explain what and why, not how.
+# --------------------
+# Footer should contain any BREAKING CHANGE notes or issue references.
+# BREAKING CHANGE: <description of the breaking change>
+# Closes #<issue number>
+# --------------------
+# Remember to:
+#   - Capitalize the subject line
+#   - Use the imperative mood in the subject line
+#   - Do not end the subject line with a period
+#   - Separate subject from body with a blank line
+#   - Use the body to explain what and why vs. how
+#   - Can use multiple lines with "-" for bullet points in body
+# --------------------
