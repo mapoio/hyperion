@@ -69,13 +69,32 @@ type Watcher interface {
 }
 
 // ChangeEvent represents a configuration change event.
-// It contains information about which configuration key changed and its new value.
+//
+// Important: The semantics of Key and Value depend on the Provider implementation:
+//
+// For file-based providers (like ViperProvider):
+//   - Key contains the configuration filename (e.g., "config.yaml")
+//   - Value is always nil
+//   - Applications should re-read configuration using Provider methods
+//
+// For future key-level providers:
+//   - Key would contain the specific config key (e.g., "database.host")
+//   - Value would contain the new value
+//
+// Example usage with file-based provider:
+//
+//	provider.Watch(func(event ChangeEvent) {
+//	    log.Printf("Config file changed: %s", event.Key)
+//	    // Re-read the specific config you care about
+//	    newLogLevel := provider.GetString("log.level")
+//	    logger.SetLevel(parseLevel(newLogLevel))
+//	})
 type ChangeEvent struct {
-	// Key is the configuration key that changed.
-	// For nested keys, this uses dot notation (e.g., "database.host").
+	// Key identifies what changed. For file-based watching, this is the filename.
+	// For key-level watching (future enhancement), this would be the config key path.
 	Key string
 
-	// Value is the new value after the change.
-	// The actual type depends on the configuration value.
+	// Value is the new value after the change. For file-based watching, this is nil.
+	// For key-level watching (future enhancement), this would be the actual new value.
 	Value any
 }
