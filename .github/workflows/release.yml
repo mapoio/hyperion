@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          prev_tag=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+
+          if [ -z "$prev_tag" ]; then
+            # First release - get all commits
+            changelog=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            # Get commits since previous tag
+            changelog=$(git log ${prev_tag}..HEAD --pretty=format:"- %s (%h)" --reverse)
+          fi
+
+          # Save to file
+          echo "$changelog" > CHANGELOG.txt
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$changelog" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## Changes in ${{ github.ref_name }}
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## Installation
+
+            ```bash
+            go get github.com/mapoio/hyperion@${{ github.ref_name }}
+            ```
+
+            ## What's Changed
+            See the [CHANGELOG](https://github.com/mapoio/hyperion/blob/main/CHANGELOG.md) for full details.
+
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+      - name: Publish to pkg.go.dev
+        run: |
+          # Trigger pkg.go.dev update
+          curl -i "https://proxy.golang.org/github.com/mapoio/hyperion/@v/${{ github.ref_name }}.info"

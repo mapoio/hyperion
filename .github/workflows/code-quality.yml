@@ -1,0 +1,257 @@
+name: Code Quality Metrics
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-metrics:
+    name: Code Quality Metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install gocyclo
+        run: go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+
+      - name: Install gocognit
+        run: go install github.com/uudashr/gocognit/cmd/gocognit@latest
+
+      - name: Install dupl
+        run: go install github.com/mibk/dupl@latest
+
+      - name: Calculate Cyclomatic Complexity
+        id: cyclo
+        run: |
+          echo "# Cyclomatic Complexity Report" > cyclo_report.md
+          echo "" >> cyclo_report.md
+
+          # Get overall stats
+          total_funcs=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | wc -l || echo 0)
+          high_complexity=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocyclo -over 15 {} \; 2>/dev/null | wc -l || echo 0)
+
+          echo "**Total Functions**: $total_funcs" >> cyclo_report.md
+          echo "**High Complexity (>15)**: $high_complexity" >> cyclo_report.md
+          echo "" >> cyclo_report.md
+
+          # Show top 10 most complex functions
+          echo "### Top 10 Most Complex Functions" >> cyclo_report.md
+          echo "" >> cyclo_report.md
+          echo "\`\`\`" >> cyclo_report.md
+          find ./pkg -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | sort -rn | head -10 || echo "No functions found"
+          echo "\`\`\`" >> cyclo_report.md
+
+          # Store metrics
+          echo "total_funcs=$total_funcs" >> $GITHUB_OUTPUT
+          echo "high_complexity=$high_complexity" >> $GITHUB_OUTPUT
+
+      - name: Calculate Cognitive Complexity
+        id: cognit
+        run: |
+          echo "# Cognitive Complexity Report" > cognit_report.md
+          echo "" >> cognit_report.md
+
+          # Get overall stats
+          total_funcs=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | wc -l || echo 0)
+          high_cognit=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocognit -over 20 {} \; 2>/dev/null | wc -l || echo 0)
+
+          echo "**Total Functions**: $total_funcs" >> cognit_report.md
+          echo "**High Cognitive Complexity (>20)**: $high_cognit" >> cognit_report.md
+          echo "" >> cognit_report.md
+
+          # Show top 10 most complex functions
+          echo "### Top 10 Functions (Cognitive)" >> cognit_report.md
+          echo "" >> cognit_report.md
+          echo "\`\`\`" >> cognit_report.md
+          find ./pkg -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | sort -rn | head -10 || echo "No functions found"
+          echo "\`\`\`" >> cognit_report.md
+
+          echo "high_cognit=$high_cognit" >> $GITHUB_OUTPUT
+
+      - name: Check Code Duplication
+        id: dupl
+        run: |
+          echo "# Code Duplication Report" > dupl_report.md
+          echo "" >> dupl_report.md
+
+          # Run dupl with threshold of 50 tokens
+          dupl_output=$(find ./pkg -name "*.go" -not -name "*_test.go" | xargs dupl -threshold 50 2>/dev/null || echo "")
+
+          # Initialize dupl_count
+          dupl_count=0
+
+          # Check if duplication was found (look for clone groups count)
+          if echo "$dupl_output" | grep -q "Found total 0 clone groups"; then
+            echo "✅ **No significant code duplication detected** (threshold: 50 tokens)" >> dupl_report.md
+          elif [ -n "$dupl_output" ] && ! echo "$dupl_output" | grep -q "Found total 0 clone groups"; then
+            dupl_count=$(echo "$dupl_output" | grep -oP 'Found total \K[0-9]+' || echo 0)
+            echo "⚠️ **Found $dupl_count clone groups of duplicated code**" >> dupl_report.md
+            echo "" >> dupl_report.md
+            echo "<details>" >> dupl_report.md
+            echo "<summary>View Duplication Details</summary>" >> dupl_report.md
+            echo "" >> dupl_report.md
+            echo "\`\`\`" >> dupl_report.md
+            echo "$dupl_output" | head -50 >> dupl_report.md
+            echo "\`\`\`" >> dupl_report.md
+            echo "</details>" >> dupl_report.md
+          else
+            echo "✅ **No significant code duplication detected** (threshold: 50 tokens)" >> dupl_report.md
+          fi
+
+          echo "dupl_count=$dupl_count" >> $GITHUB_OUTPUT
+
+      - name: Generate Quality Score
+        id: score
+        run: |
+          total_funcs=${{ steps.cyclo.outputs.total_funcs }}
+          high_complexity=${{ steps.cyclo.outputs.high_complexity }}
+          high_cognit=${{ steps.cognit.outputs.high_cognit }}
+          dupl_count=${{ steps.dupl.outputs.dupl_count }}
+
+          # Calculate quality score (0-100)
+          # Start with 100, deduct points for issues
+          score=100
+
+          if [ $total_funcs -gt 0 ]; then
+            # Deduct for high cyclomatic complexity (max 30 points)
+            complexity_ratio=$((high_complexity * 100 / total_funcs))
+            complexity_penalty=$((complexity_ratio * 30 / 100))
+            score=$((score - complexity_penalty))
+
+            # Deduct for high cognitive complexity (max 30 points)
+            cognit_ratio=$((high_cognit * 100 / total_funcs))
+            cognit_penalty=$((cognit_ratio * 30 / 100))
+            score=$((score - cognit_penalty))
+          fi
+
+          # Deduct for duplication (max 20 points)
+          if [ $dupl_count -gt 0 ]; then
+            dupl_penalty=$((dupl_count > 20 ? 20 : dupl_count))
+            score=$((score - dupl_penalty))
+          fi
+
+          # Ensure score is between 0-100
+          if [ $score -lt 0 ]; then
+            score=0
+          fi
+
+          echo "quality_score=$score" >> $GITHUB_OUTPUT
+
+          # Determine grade
+          if [ $score -ge 90 ]; then
+            grade="A"
+            emoji="🎉"
+          elif [ $score -ge 80 ]; then
+            grade="B"
+            emoji="✅"
+          elif [ $score -ge 70 ]; then
+            grade="C"
+            emoji="⚠️"
+          elif [ $score -ge 60 ]; then
+            grade="D"
+            emoji="⚠️"
+          else
+            grade="F"
+            emoji="❌"
+          fi
+
+          echo "grade=$grade" >> $GITHUB_OUTPUT
+          echo "emoji=$emoji" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const cycloReport = fs.readFileSync('cyclo_report.md', 'utf8');
+            const cognitReport = fs.readFileSync('cognit_report.md', 'utf8');
+            const duplReport = fs.readFileSync('dupl_report.md', 'utf8');
+
+            const totalFuncs = ${{ steps.cyclo.outputs.total_funcs }};
+            const highComplexity = ${{ steps.cyclo.outputs.high_complexity }};
+            const highCognit = ${{ steps.cognit.outputs.high_cognit }};
+            const duplCount = ${{ steps.dupl.outputs.dupl_count }};
+            const qualityScore = ${{ steps.score.outputs.quality_score }};
+            const grade = '${{ steps.score.outputs.grade }}';
+            const emoji = '${{ steps.score.outputs.emoji }}';
+
+            const complexityPercent = totalFuncs > 0 ? ((highComplexity / totalFuncs) * 100).toFixed(1) : 0;
+            const cognitPercent = totalFuncs > 0 ? ((highCognit / totalFuncs) * 100).toFixed(1) : 0;
+
+            const body = `## ${emoji} Code Quality Report - Grade ${grade} (${qualityScore}/100)
+
+            ### 📊 Metrics Summary
+
+            | Metric | Value | Threshold | Status |
+            |--------|-------|-----------|--------|
+            | **Cyclomatic Complexity** | ${highComplexity}/${totalFuncs} (${complexityPercent}%) | ≤15 | ${highComplexity === 0 ? '✅' : '⚠️'} |
+            | **Cognitive Complexity** | ${highCognit}/${totalFuncs} (${cognitPercent}%) | ≤20 | ${highCognit === 0 ? '✅' : '⚠️'} |
+            | **Code Duplication** | ${duplCount} instances | 0 | ${duplCount === 0 ? '✅' : '⚠️'} |
+
+            ---
+
+            <details>
+            <summary>📈 Cyclomatic Complexity Details</summary>
+
+            ${cycloReport}
+
+            </details>
+
+            <details>
+            <summary>🧠 Cognitive Complexity Details</summary>
+
+            ${cognitReport}
+
+            </details>
+
+            <details>
+            <summary>🔄 Code Duplication Details</summary>
+
+            ${duplReport}
+
+            </details>
+
+            ---
+
+            <sub>Quality Score: Based on complexity ratios and duplication. Target: A grade (90+)</sub>`;
+
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Code Quality Report')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }

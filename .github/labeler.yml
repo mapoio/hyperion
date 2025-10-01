@@ -1,0 +1,102 @@
+# Label configuration for auto-labeling PRs based on file changes
+
+# Core components
+'component: hyperconfig':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperconfig/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperconfig*'
+
+'component: hyperlog':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperlog/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperlog*'
+
+'component: hyperctx':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperctx/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperctx*'
+
+'component: hyperdb':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperdb/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperdb*'
+
+'component: hypercache':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypercache/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypercache*'
+
+'component: hyperweb':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperweb/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperweb*'
+
+'component: hypergrpc':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypergrpc/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypergrpc*'
+
+'component: hyperhttp':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperhttp/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperhttp*'
+
+'component: hyperstore':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hyperstore/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hyperstore*'
+
+'component: hypercrypto':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypercrypto/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypercrypto*'
+
+'component: hypererror':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypererror/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypererror*'
+
+'component: hypervalidator':
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/hypervalidator/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/stories/*hypervalidator*'
+
+# Change types
+'type: documentation':
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*.md'
+
+'type: tests':
+  - changed-files:
+    - any-glob-to-any-file: '**/*_test.go'
+
+'type: ci':
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
+  - changed-files:
+    - any-glob-to-any-file: '.golangci.yml'
+  - changed-files:
+    - any-glob-to-any-file: 'Makefile'
+
+'type: dependencies':
+  - changed-files:
+    - any-glob-to-any-file: 'go.mod'
+  - changed-files:
+    - any-glob-to-any-file: 'go.sum'
+
+# Note: Size labels based on file count are not supported by actions/labeler@v5
+# Consider using a separate action like 'Changed Lines Count Labeler' if needed
