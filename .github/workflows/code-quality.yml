@@ -88,20 +88,25 @@ jobs:
           # Run dupl with threshold of 50 tokens
           dupl_output=$(find ./pkg -name "*.go" -not -name "*_test.go" | xargs dupl -threshold 50 2>/dev/null || echo "")
 
-          if [ -z "$dupl_output" ]; then
+          # Initialize dupl_count
+          dupl_count=0
+
+          # Check if duplication was found (look for clone groups count)
+          if echo "$dupl_output" | grep -q "Found total 0 clone groups"; then
             echo "✅ **No significant code duplication detected** (threshold: 50 tokens)" >> dupl_report.md
-            dupl_count=0
-          else
-            dupl_count=$(echo "$dupl_output" | grep -c "found" || echo 0)
-            echo "⚠️ **Found $dupl_count instances of duplicated code**" >> dupl_report.md
+          elif [ -n "$dupl_output" ] && ! echo "$dupl_output" | grep -q "Found total 0 clone groups"; then
+            dupl_count=$(echo "$dupl_output" | grep -oP 'Found total \K[0-9]+' || echo 0)
+            echo "⚠️ **Found $dupl_count clone groups of duplicated code**" >> dupl_report.md
             echo "" >> dupl_report.md
             echo "<details>" >> dupl_report.md
             echo "<summary>View Duplication Details</summary>" >> dupl_report.md
             echo "" >> dupl_report.md
             echo "\`\`\`" >> dupl_report.md
-            echo "$dupl_output" | head -50
+            echo "$dupl_output" | head -50 >> dupl_report.md
             echo "\`\`\`" >> dupl_report.md
             echo "</details>" >> dupl_report.md
+          else
+            echo "✅ **No significant code duplication detected** (threshold: 50 tokens)" >> dupl_report.md
           fi
 
           echo "dupl_count=$dupl_count" >> $GITHUB_OUTPUT
