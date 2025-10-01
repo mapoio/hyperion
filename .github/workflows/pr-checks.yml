@@ -111,10 +111,8 @@ jobs:
 
       - name: Check for conflict markers
         run: |
-          CONFLICT_START="<""<""<""<""<""<""< HEAD"
-          CONFLICT_MID="=""=""=""=""=""=""="
-          CONFLICT_END=">">">">">">"">"
-          conflicts=$(grep -rE "($CONFLICT_START|$CONFLICT_MID|$CONFLICT_END)" . --exclude-dir=.git --exclude-dir=vendor || true)
+          # Use grep patterns directly to avoid shell quoting issues
+          conflicts=$(grep -rE '(<{7} HEAD|={7}|>{7})' . --exclude-dir=.git --exclude-dir=vendor --exclude-dir=.github || true)
           if [ -n "$conflicts" ]; then
             echo "❌ Merge conflict markers detected:"
             echo "$conflicts"

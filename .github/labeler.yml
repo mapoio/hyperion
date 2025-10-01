@@ -98,19 +98,29 @@
   - changed-files:
     - any-glob-to-any-file: 'go.sum'
 
-# Size labels
+# Size labels (based on number of changed files)
 'size: small':
   - changed-files:
-    - count: 1-10
+    - any-glob-to-any-file: '**/*'
+      count:
+        lte: 10
 
 'size: medium':
   - changed-files:
-    - count: 11-50
+    - any-glob-to-any-file: '**/*'
+      count:
+        gte: 11
+        lte: 50
 
 'size: large':
   - changed-files:
-    - count: 51-100
+    - any-glob-to-any-file: '**/*'
+      count:
+        gte: 51
+        lte: 100
 
 'size: x-large':
   - changed-files:
-    - count: 101-500
+    - any-glob-to-any-file: '**/*'
+      count:
+        gte: 101
