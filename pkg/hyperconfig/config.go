@@ -90,11 +90,11 @@ type Watcher interface {
 //	    logger.SetLevel(parseLevel(newLogLevel))
 //	})
 type ChangeEvent struct {
-	// Key identifies what changed. For file-based watching, this is the filename.
-	// For key-level watching (future enhancement), this would be the config key path.
-	Key string
-
 	// Value is the new value after the change. For file-based watching, this is nil.
 	// For key-level watching (future enhancement), this would be the actual new value.
 	Value any
+
+	// Key identifies what changed. For file-based watching, this is the filename.
+	// For key-level watching (future enhancement), this would be the config key path.
+	Key string
 }

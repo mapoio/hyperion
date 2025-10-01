@@ -11,19 +11,13 @@ import (
 	"github.com/spf13/viper"
 )
 
-// callbackEntry holds a callback function with its unique ID.
-type callbackEntry struct {
-	id       uint64
-	callback func(ChangeEvent)
-}
-
 // ViperProvider is a Provider implementation based on spf13/viper.
 // It supports multiple configuration formats (YAML, JSON, TOML) and
 // automatic environment variable override.
 type ViperProvider struct {
 	v          *viper.Viper
-	mu         sync.RWMutex
 	callbacks  map[uint64]func(ChangeEvent)
+	mu         sync.RWMutex
 	nextCallID uint64
 }
 

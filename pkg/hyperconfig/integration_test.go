@@ -33,7 +33,7 @@ database:
   port: 5432
   max_connections: 100
 `
-	err := os.WriteFile(configPath, []byte(initialConfig), 0644)
+	err := os.WriteFile(configPath, []byte(initialConfig), 0o644)
 	require.NoError(t, err)
 
 	// Create provider
@@ -73,7 +73,7 @@ database:
   port: 5432
   max_connections: 100
 `
-	err = os.WriteFile(configPath, []byte(updatedConfig1), 0644)
+	err = os.WriteFile(configPath, []byte(updatedConfig1), 0o644)
 	require.NoError(t, err)
 
 	// Wait for change detection
@@ -101,7 +101,7 @@ database:
   port: 5432
   max_connections: 200
 `
-	err = os.WriteFile(configPath, []byte(updatedConfig2), 0644)
+	err = os.WriteFile(configPath, []byte(updatedConfig2), 0o644)
 	require.NoError(t, err)
 
 	// Wait for change detection
@@ -139,7 +139,7 @@ service_b:
   enabled: true
   timeout: 60
 `
-	err := os.WriteFile(configPath, []byte(initialConfig), 0644)
+	err := os.WriteFile(configPath, []byte(initialConfig), 0o644)
 	require.NoError(t, err)
 
 	provider, err := NewViperProvider(configPath)
@@ -180,7 +180,7 @@ service_b:
   enabled: false
   timeout: 90
 `
-	err = os.WriteFile(configPath, []byte(updatedConfig), 0644)
+	err = os.WriteFile(configPath, []byte(updatedConfig), 0o644)
 	require.NoError(t, err)
 
 	// Both services should be notified
@@ -219,7 +219,7 @@ func TestIntegration_StopWatchingDuringOperation(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
-	err := os.WriteFile(configPath, []byte("key: value1"), 0644)
+	err := os.WriteFile(configPath, []byte("key: value1"), 0o644)
 	require.NoError(t, err)
 
 	provider, err := NewViperProvider(configPath)
@@ -238,7 +238,7 @@ func TestIntegration_StopWatchingDuringOperation(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger first change
-	err = os.WriteFile(configPath, []byte("key: value2"), 0644)
+	err = os.WriteFile(configPath, []byte("key: value2"), 0o644)
 	require.NoError(t, err)
 
 	// Wait for first notification
@@ -253,7 +253,7 @@ func TestIntegration_StopWatchingDuringOperation(t *testing.T) {
 	stop()
 
 	// Trigger second change - should NOT notify
-	err = os.WriteFile(configPath, []byte("key: value3"), 0644)
+	err = os.WriteFile(configPath, []byte("key: value3"), 0o644)
 	require.NoError(t, err)
 
 	// Wait a bit to ensure no notification
@@ -285,9 +285,9 @@ func TestIntegration_ComplexConfigStructure(t *testing.T) {
 	}
 
 	type AppConfig struct {
-		Server   ServerConfig   `mapstructure:"server"`
-		Database DatabaseConfig `mapstructure:"database"`
 		LogLevel string         `mapstructure:"log_level"`
+		Database DatabaseConfig `mapstructure:"database"`
+		Server   ServerConfig   `mapstructure:"server"`
 	}
 
 	tmpDir := t.TempDir()
@@ -306,7 +306,7 @@ database:
   max_connections: 50
   max_idle_time: 300
 `
-	err := os.WriteFile(configPath, []byte(initialConfig), 0644)
+	err := os.WriteFile(configPath, []byte(initialConfig), 0o644)
 	require.NoError(t, err)
 
 	provider, err := NewViperProvider(configPath)
@@ -345,7 +345,7 @@ database:
   max_connections: 100
   max_idle_time: 600
 `
-	err = os.WriteFile(configPath, []byte(updatedConfig), 0644)
+	err = os.WriteFile(configPath, []byte(updatedConfig), 0o644)
 	require.NoError(t, err)
 
 	// Wait for reload

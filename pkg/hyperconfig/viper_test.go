@@ -80,7 +80,7 @@ port = 3306
 			// Create temp config file
 			tmpDir := t.TempDir()
 			configPath := filepath.Join(tmpDir, "config."+tt.format)
-			err := os.WriteFile(configPath, []byte(tt.content), 0644)
+			err := os.WriteFile(configPath, []byte(tt.content), 0o644)
 			require.NoError(t, err)
 
 			provider, err := NewViperProvider(configPath)
@@ -171,13 +171,13 @@ func TestViperProvider_AllKeys(t *testing.T) {
 func TestViperProvider_Unmarshal(t *testing.T) {
 	type DatabaseConfig struct {
 		Host     string `mapstructure:"host"`
-		Port     int    `mapstructure:"port"`
 		Username string `mapstructure:"username"`
+		Port     int    `mapstructure:"port"`
 	}
 
 	type AppConfig struct {
-		Database DatabaseConfig `mapstructure:"database"`
 		LogLevel string         `mapstructure:"log_level"`
+		Database DatabaseConfig `mapstructure:"database"`
 	}
 
 	v := viper.New()
@@ -231,7 +231,7 @@ log:
 database:
   host: localhost
 `
-	err := os.WriteFile(configPath, []byte(content), 0644)
+	err := os.WriteFile(configPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	provider, err := NewViperProvider(configPath)
@@ -250,7 +250,7 @@ func TestViperProvider_Watch(t *testing.T) {
 log:
   level: info
 `
-	err := os.WriteFile(configPath, []byte(initialContent), 0644)
+	err := os.WriteFile(configPath, []byte(initialContent), 0o644)
 	require.NoError(t, err)
 
 	provider, err := NewViperProvider(configPath)
@@ -272,7 +272,7 @@ log:
 log:
   level: debug
 `
-	err = os.WriteFile(configPath, []byte(updatedContent), 0644)
+	err = os.WriteFile(configPath, []byte(updatedContent), 0o644)
 	require.NoError(t, err)
 
 	// Wait for callback (with timeout)
@@ -292,7 +292,7 @@ func TestViperProvider_Watch_MultipleCallbacks(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	initialContent := `test: value1`
-	err := os.WriteFile(configPath, []byte(initialContent), 0644)
+	err := os.WriteFile(configPath, []byte(initialContent), 0o644)
 	require.NoError(t, err)
 
 	provider, err := NewViperProvider(configPath)
@@ -318,7 +318,7 @@ func TestViperProvider_Watch_MultipleCallbacks(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Modify config file
-	err = os.WriteFile(configPath, []byte("test: value2"), 0644)
+	err = os.WriteFile(configPath, []byte("test: value2"), 0o644)
 	require.NoError(t, err)
 
 	// Both callbacks should be called
@@ -346,7 +346,7 @@ func TestViperProvider_Watch_Stop(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	initialContent := `test: value1`
-	err := os.WriteFile(configPath, []byte(initialContent), 0644)
+	err := os.WriteFile(configPath, []byte(initialContent), 0o644)
 	require.NoError(t, err)
 
 	provider, err := NewViperProvider(configPath)
@@ -366,7 +366,7 @@ func TestViperProvider_Watch_Stop(t *testing.T) {
 	stop()
 
 	// Modify config file
-	err = os.WriteFile(configPath, []byte("test: value2"), 0644)
+	err = os.WriteFile(configPath, []byte("test: value2"), 0o644)
 	require.NoError(t, err)
 
 	// Callback should NOT be called after stop
