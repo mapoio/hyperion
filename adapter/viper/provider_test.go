@@ -203,12 +203,10 @@ app:
 	}
 
 	// Register watch callback
-	called := make(chan bool, 1)
-	var receivedEvent hyperion.ChangeEvent
+	eventChan := make(chan hyperion.ChangeEvent, 1)
 	stop, err := provider.Watch(func(event hyperion.ChangeEvent) {
-		receivedEvent = event
 		select {
-		case called <- true:
+		case eventChan <- event:
 		default:
 		}
 	})
@@ -231,10 +229,10 @@ app:
 
 	// Wait for callback
 	select {
-	case <-called:
+	case event := <-eventChan:
 		// Callback was invoked
-		if receivedEvent.Key != "config.yaml" {
-			t.Errorf("Event key = %v, want config.yaml", receivedEvent.Key)
+		if event.Key != "config.yaml" {
+			t.Errorf("Event key = %v, want config.yaml", event.Key)
 		}
 	case <-time.After(2 * time.Second):
 		t.Error("Watch callback was not invoked")
