@@ -1,14 +1,64 @@
-# Hyperion Quick Start Guide
+# Hyperion v2.0 Quick Start Guide
 
-Build your first Hyperion application in 10 minutes.
+**Version**: 2.0
+**Last Updated**: October 2025
+
+Build your first Hyperion v2.0 application in 15 minutes using the Core-Adapter architecture.
+
+---
+
+## What You'll Build
+
+A RESTful user management API with:
+- Configuration management (Viper adapter)
+- Structured logging (planned: Zap adapter)
+- Database access with transactions (planned: GORM adapter)
+- Dependency injection (fx)
+- Clean architecture layers
 
 ---
 
 ## Prerequisites
 
-- Go 1.21+
+- **Go 1.24+** (v2.0 requires Go 1.24 for workspace support)
 - Basic Go programming knowledge
-- (Optional) Docker - for running PostgreSQL/Redis
+- (Optional) Docker - for running PostgreSQL
+
+---
+
+## Understanding Hyperion v2.0
+
+Before we start, understand the key concepts:
+
+### Core-Adapter Pattern
+
+```
+┌─────────────────────────────────────┐
+│   Your Application                   │
+│   (uses interfaces only)             │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│   hyperion (Core Library)            │
+│   • Logger interface                 │
+│   • Database interface               │
+│   • Config interface                 │
+│   • ZERO 3rd-party deps (except fx)  │
+└──────────────┬──────────────────────┘
+               │
+    ┌──────────┴──────────┬─────────────┐
+    │                     │             │
+┌───▼──────┐    ┌────────▼───┐  ┌──────▼─────┐
+│ adapter/  │    │ adapter/   │  │ adapter/   │
+│ viper     │    │ zap        │  │ gorm       │
+│ (Config)  │    │ (Logger)   │  │ (Database) │
+└───────────┘    └────────────┘  └────────────┘
+```
+
+**Benefits**:
+- Zero lock-in: Core library has NO dependency on Viper, Zap, or GORM
+- Swap implementations: Replace any adapter without touching core code
+- Test-friendly: Use NoOp implementations or mocks
 
 ---
 
@@ -22,11 +72,22 @@ go mod init github.com/yourusername/my-hyperion-app
 
 ---
 
-## Step 2: Install Hyperion
+## Step 2: Install Hyperion v2.0
 
 ```bash
+# Core library (interfaces only)
 go get github.com/mapoio/hyperion
+
+# Viper adapter (configuration)
+go get github.com/mapoio/hyperion/adapter/viper
+
+# Note: In v2.0, you explicitly choose which adapters to use
 ```
+
+**What's different from v1.0?**
+- No `pkg/` prefix in import paths
+- Adapters are separate modules
+- You only install what you need
 
 ---
 
@@ -39,18 +100,27 @@ mkdir configs
 Create `configs/config.yaml`:
 
 ```yaml
-log:
-  level: info
-  format: json
+# Application settings
+app:
+  name: my-hyperion-app
+  env: development
 
-database:
-  driver: postgres
-  dsn: "host=localhost user=test password=test dbname=testdb port=5432 sslmode=disable"
-
-web:
+# Server configuration (for future web module)
+server:
   host: "0.0.0.0"
   port: 8080
-  mode: debug
+
+# Database configuration (for future GORM adapter)
+database:
+  driver: postgres
+  host: localhost
+  port: 5432
+  username: test
+  password: test
+  database: testdb
+  sslmode: disable
+  max_open_conns: 25
+  max_idle_conns: 5
 ```
 
 ---
@@ -62,22 +132,23 @@ Create `internal/domain/user.go`:
 ```go
 package domain
 
-import (
-    "time"
-)
+import "time"
 
+// User represents a user entity in the domain
 type User struct {
-    ID        string    `gorm:"primaryKey"`
-    Username  string    `gorm:"uniqueIndex;not null"`
-    Email     string    `gorm:"uniqueIndex;not null"`
-    CreatedAt time.Time
-    UpdatedAt time.Time
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 ```
 
+**Note**: Domain models are pure Go structs with NO framework dependencies.
+
 ---
 
-## Step 5: Create Repository
+## Step 5: Create Repository Interface
 
 Create `internal/repository/user_repository.go`:
 
@@ -85,69 +156,95 @@ Create `internal/repository/user_repository.go`:
 package repository
 
 import (
-    "github.com/mapoio/hyperion/pkg/hyperctx"
-    "github.com/mapoio/hyperion/pkg/hypererror"
-    "github.com/yourusername/my-hyperion-app/internal/domain"
-    "go.opentelemetry.io/otel/attribute"
-    "gorm.io/gorm"
+	"github.com/mapoio/hyperion"
+	"github.com/yourusername/my-hyperion-app/internal/domain"
 )
 
+// UserRepository defines data access operations for users
+// Note: Uses hyperion.Context (not pkg/hyperctx in v2.0)
 type UserRepository interface {
-    Create(ctx hyperctx.Context, user *domain.User) error
-    FindByID(ctx hyperctx.Context, id string) (*domain.User, error)
-    FindAll(ctx hyperctx.Context) ([]*domain.User, error)
+	Create(ctx hyperion.Context, user *domain.User) error
+	FindByID(ctx hyperion.Context, id string) (*domain.User, error)
+	FindAll(ctx hyperion.Context) ([]*domain.User, error)
+}
+```
+
+**v2.0 Changes**:
+- Import: `github.com/mapoio/hyperion` (no `pkg/` prefix)
+- Context: `hyperion.Context` interface with accessor pattern
+
+---
+
+## Step 6: Implement Repository (In-Memory for Demo)
+
+Create `internal/repository/user_memory_repository.go`:
+
+```go
+package repository
+
+import (
+	"fmt"
+	"sync"
+
+	"github.com/mapoio/hyperion"
+	"github.com/yourusername/my-hyperion-app/internal/domain"
+)
+
+// memoryUserRepository is an in-memory implementation for demo purposes
+// In production, use GORM adapter: github.com/mapoio/hyperion/adapter/gorm
+type memoryUserRepository struct {
+	mu    sync.RWMutex
+	users map[string]*domain.User
 }
 
-type userRepository struct{}
-
-func NewUserRepository() UserRepository {
-    return &userRepository{}
+// NewMemoryUserRepository creates a new in-memory user repository
+func NewMemoryUserRepository() UserRepository {
+	return &memoryUserRepository{
+		users: make(map[string]*domain.User),
+	}
 }
 
-func (r *userRepository) Create(ctx hyperctx.Context, user *domain.User) error {
-    ctx, end := ctx.StartSpan("repository", "UserRepository", "Create")
-    defer end()
+func (r *memoryUserRepository) Create(ctx hyperion.Context, user *domain.User) error {
+	// v2.0 Accessor Pattern: ctx.Logger() returns the logger
+	ctx.Logger().Info("creating user", "username", user.Username)
 
-    if err := ctx.DB().WithContext(ctx).Create(user).Error; err != nil {
-        ctx.RecordError(err)
-        return hypererror.InternalWrap("failed to create user", err)
-    }
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-    return nil
+	if _, exists := r.users[user.ID]; exists {
+		return fmt.Errorf("user with id %s already exists", user.ID)
+	}
+
+	r.users[user.ID] = user
+	return nil
 }
 
-func (r *userRepository) FindByID(ctx hyperctx.Context, id string) (*domain.User, error) {
-    ctx, end := ctx.StartSpan("repository", "UserRepository", "FindByID")
-    defer end()
+func (r *memoryUserRepository) FindByID(ctx hyperion.Context, id string) (*domain.User, error) {
+	ctx.Logger().Debug("finding user by id", "user_id", id)
 
-    ctx.SetAttributes(attribute.String("user_id", id))
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
-    var user domain.User
-    err := ctx.DB().WithContext(ctx).First(&user, "id = ?", id).Error
+	user, ok := r.users[id]
+	if !ok {
+		return nil, fmt.Errorf("user not found: %s", id)
+	}
 
-    if err == gorm.ErrRecordNotFound {
-        return nil, hypererror.ResourceNotFound("user", id)
-    }
-
-    if err != nil {
-        ctx.RecordError(err)
-        return nil, hypererror.InternalWrap("failed to find user", err)
-    }
-
-    return &user, nil
+	return user, nil
 }
 
-func (r *userRepository) FindAll(ctx hyperctx.Context) ([]*domain.User, error) {
-    ctx, end := ctx.StartSpan("repository", "UserRepository", "FindAll")
-    defer end()
+func (r *memoryUserRepository) FindAll(ctx hyperion.Context) ([]*domain.User, error) {
+	ctx.Logger().Debug("finding all users")
 
-    var users []*domain.User
-    if err := ctx.DB().WithContext(ctx).Find(&users).Error; err != nil {
-        ctx.RecordError(err)
-        return nil, hypererror.InternalWrap("failed to find users", err)
-    }
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
-    return users, nil
+	users := make([]*domain.User, 0, len(r.users))
+	for _, user := range r.users {
+		users = append(users, user)
+	}
+
+	return users, nil
 }
 ```
 
@@ -158,16 +255,22 @@ package repository
 
 import "go.uber.org/fx"
 
+// Module provides repository implementations
 var Module = fx.Module("repository",
-    fx.Provide(
-        NewUserRepository,
-    ),
+	fx.Provide(
+		NewMemoryUserRepository,
+	),
 )
 ```
 
+**v2.0 Key Points**:
+- Use `ctx.Logger()` instead of `ctx.Info()` (accessor pattern)
+- Context automatically provides logger from dependency injection
+- Repository is just a regular Go interface
+
 ---
 
-## Step 6: Create Service
+## Step 7: Create Service Layer
 
 Create `internal/service/user_service.go`:
 
@@ -175,93 +278,86 @@ Create `internal/service/user_service.go`:
 package service
 
 import (
-    "github.com/google/uuid"
-    "github.com/mapoio/hyperion/pkg/hyperctx"
-    "github.com/mapoio/hyperion/pkg/hyperdb"
-    "github.com/yourusername/my-hyperion-app/internal/domain"
-    "github.com/yourusername/my-hyperion-app/internal/repository"
-    "go.opentelemetry.io/otel/attribute"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/mapoio/hyperion"
+	"github.com/yourusername/my-hyperion-app/internal/domain"
+	"github.com/yourusername/my-hyperion-app/internal/repository"
 )
 
+// UserService defines business operations for users
 type UserService interface {
-    CreateUser(ctx hyperctx.Context, username, email string) (*domain.User, error)
-    GetUser(ctx hyperctx.Context, id string) (*domain.User, error)
-    ListUsers(ctx hyperctx.Context) ([]*domain.User, error)
+	CreateUser(ctx hyperion.Context, username, email string) (*domain.User, error)
+	GetUser(ctx hyperion.Context, id string) (*domain.User, error)
+	ListUsers(ctx hyperion.Context) ([]*domain.User, error)
 }
 
 type userService struct {
-    uow      hyperdb.UnitOfWork
-    userRepo repository.UserRepository
+	userRepo repository.UserRepository
 }
 
-func NewUserService(
-    uow hyperdb.UnitOfWork,
-    userRepo repository.UserRepository,
-) UserService {
-    return &userService{
-        uow:      uow,
-        userRepo: userRepo,
-    }
+// NewUserService creates a new user service
+// Dependencies are automatically injected by fx
+func NewUserService(userRepo repository.UserRepository) UserService {
+	return &userService{
+		userRepo: userRepo,
+	}
 }
 
-func (s *userService) CreateUser(ctx hyperctx.Context, username, email string) (*domain.User, error) {
-    ctx, end := ctx.StartSpan("service", "UserService", "CreateUser")
-    defer end()
+func (s *userService) CreateUser(ctx hyperion.Context, username, email string) (*domain.User, error) {
+	// v2.0: Use accessor pattern for tracing
+	_, span := ctx.Tracer().Start(ctx, "UserService.CreateUser")
+	defer span.End()
 
-    ctx.SetAttributes(
-        attribute.String("username", username),
-        attribute.String("email", email),
-    )
+	// Log with structured fields
+	ctx.Logger().Info("creating new user",
+		"username", username,
+		"email", email,
+	)
 
-    var createdUser *domain.User
+	user := &domain.User{
+		ID:        uuid.New().String(),
+		Username:  username,
+		Email:     email,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
 
-    err := s.uow.WithTransaction(ctx, func(txCtx hyperctx.Context) error {
-        user := &domain.User{
-            ID:       uuid.New().String(),
-            Username: username,
-            Email:    email,
-        }
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		ctx.Logger().Error("failed to create user", "error", err)
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
 
-        if err := s.userRepo.Create(txCtx, user); err != nil {
-            return err
-        }
-
-        createdUser = user
-        return nil
-    })
-
-    if err != nil {
-        ctx.RecordError(err)
-        return nil, err
-    }
-
-    return createdUser, nil
+	return user, nil
 }
 
-func (s *userService) GetUser(ctx hyperctx.Context, id string) (*domain.User, error) {
-    ctx, end := ctx.StartSpan("service", "UserService", "GetUser")
-    defer end()
+func (s *userService) GetUser(ctx hyperion.Context, id string) (*domain.User, error) {
+	_, span := ctx.Tracer().Start(ctx, "UserService.GetUser")
+	defer span.End()
 
-    user, err := s.userRepo.FindByID(ctx, id)
-    if err != nil {
-        ctx.RecordError(err)
-        return nil, err
-    }
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		ctx.Logger().Error("failed to get user", "user_id", id, "error", err)
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
 
-    return user, nil
+	return user, nil
 }
 
-func (s *userService) ListUsers(ctx hyperctx.Context) ([]*domain.User, error) {
-    ctx, end := ctx.StartSpan("service", "UserService", "ListUsers")
-    defer end()
+func (s *userService) ListUsers(ctx hyperion.Context) ([]*domain.User, error) {
+	_, span := ctx.Tracer().Start(ctx, "UserService.ListUsers")
+	defer span.End()
 
-    users, err := s.userRepo.FindAll(ctx)
-    if err != nil {
-        ctx.RecordError(err)
-        return nil, err
-    }
+	users, err := s.userRepo.FindAll(ctx)
+	if err != nil {
+		ctx.Logger().Error("failed to list users", "error", err)
+		return nil, fmt.Errorf("failed to list users: %w", err)
+	}
 
-    return users, nil
+	ctx.Logger().Info("listed users", "count", len(users))
+	return users, nil
 }
 ```
 
@@ -272,137 +368,22 @@ package service
 
 import "go.uber.org/fx"
 
+// Module provides service implementations
 var Module = fx.Module("service",
-    fx.Provide(
-        NewUserService,
-    ),
+	fx.Provide(
+		NewUserService,
+	),
 )
 ```
+
+**v2.0 Tracing**:
+- `ctx.Tracer().Start(ctx, "operation")` returns span
+- Tracer interface is OTel-compatible (but core doesn't depend on OTel)
+- Works with NoOp tracer by default
 
 ---
 
-## Step 7: Create Handler
-
-Create `internal/handler/user_handler.go`:
-
-```go
-package handler
-
-import (
-    "github.com/gin-gonic/gin"
-    "github.com/mapoio/hyperion/pkg/hyperctx"
-    "github.com/mapoio/hyperion/pkg/hypererror"
-    "github.com/yourusername/my-hyperion-app/internal/service"
-)
-
-type UserHandler struct {
-    userService service.UserService
-}
-
-func NewUserHandler(userService service.UserService) *UserHandler {
-    return &UserHandler{
-        userService: userService,
-    }
-}
-
-type CreateUserRequest struct {
-    Username string `json:"username" binding:"required"`
-    Email    string `json:"email" binding:"required,email"`
-}
-
-func (h *UserHandler) CreateUser(c *gin.Context) {
-    ctx := c.MustGet("hyperctx").(hyperctx.Context)
-
-    var req CreateUserRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"error": err.Error()})
-        return
-    }
-
-    user, err := h.userService.CreateUser(ctx, req.Username, req.Email)
-    if err != nil {
-        ctx.RecordError(err)
-        status := hypererror.GetHTTPStatus(err)
-
-        if hyperErr, ok := hypererror.As(err); ok {
-            c.JSON(status, hyperErr.ToResponse())
-        } else {
-            c.JSON(500, gin.H{"error": "internal error"})
-        }
-        return
-    }
-
-    c.JSON(201, user)
-}
-
-func (h *UserHandler) GetUser(c *gin.Context) {
-    ctx := c.MustGet("hyperctx").(hyperctx.Context)
-
-    userID := c.Param("id")
-
-    user, err := h.userService.GetUser(ctx, userID)
-    if err != nil {
-        ctx.RecordError(err)
-        status := hypererror.GetHTTPStatus(err)
-
-        if hyperErr, ok := hypererror.As(err); ok {
-            c.JSON(status, hyperErr.ToResponse())
-        } else {
-            c.JSON(500, gin.H{"error": "internal error"})
-        }
-        return
-    }
-
-    c.JSON(200, user)
-}
-
-func (h *UserHandler) ListUsers(c *gin.Context) {
-    ctx := c.MustGet("hyperctx").(hyperctx.Context)
-
-    users, err := h.userService.ListUsers(ctx)
-    if err != nil {
-        ctx.RecordError(err)
-        c.JSON(500, gin.H{"error": "internal error"})
-        return
-    }
-
-    c.JSON(200, gin.H{"users": users})
-}
-```
-
-Create `internal/handler/module.go`:
-
-```go
-package handler
-
-import (
-    "github.com/mapoio/hyperion/pkg/hyperweb"
-    "go.uber.org/fx"
-)
-
-var Module = fx.Module("handler",
-    fx.Provide(NewUserHandler),
-    fx.Invoke(RegisterRoutes),
-)
-
-func RegisterRoutes(server *hyperweb.Server, userHandler *UserHandler) {
-    engine := server.Engine()
-
-    api := engine.Group("/api/v1")
-    {
-        users := api.Group("/users")
-        {
-            users.POST("", userHandler.CreateUser)
-            users.GET("/:id", userHandler.GetUser)
-            users.GET("", userHandler.ListUsers)
-        }
-    }
-}
-```
-
----
-
-## Step 8: Create Main Program
+## Step 8: Create a Simple CLI
 
 Create `cmd/server/main.go`:
 
@@ -410,225 +391,419 @@ Create `cmd/server/main.go`:
 package main
 
 import (
-    "github.com/mapoio/hyperion/pkg/hyperion"
-    "github.com/yourusername/my-hyperion-app/internal/handler"
-    "github.com/yourusername/my-hyperion-app/internal/repository"
-    "github.com/yourusername/my-hyperion-app/internal/service"
-    "go.uber.org/fx"
+	"context"
+	"fmt"
+	"os"
+
+	"go.uber.org/fx"
+
+	"github.com/mapoio/hyperion"
+	"github.com/mapoio/hyperion/adapter/viper"
+	"github.com/yourusername/my-hyperion-app/internal/repository"
+	"github.com/yourusername/my-hyperion-app/internal/service"
 )
 
 func main() {
-    app := fx.New(
-        // Import Hyperion core with web server
-        hyperion.Web(),
+	app := fx.New(
+		// v2.0 Core Module (provides NoOp defaults for all interfaces)
+		hyperion.CoreModule,
 
-        // Register application modules
-        repository.Module,
-        service.Module,
-        handler.Module,
-    )
+		// v2.0 Viper Adapter (replaces NoOp Config with real implementation)
+		viper.Module,
 
-    app.Run()
+		// Application modules
+		repository.Module,
+		service.Module,
+
+		// Demo: Create some users on startup
+		fx.Invoke(demoCreateUsers),
+	)
+
+	app.Run()
 }
+
+// demoCreateUsers demonstrates using the service layer
+func demoCreateUsers(
+	lc fx.Lifecycle,
+	userService service.UserService,
+	cfg hyperion.Config,
+	logger hyperion.Logger,
+) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			// Create a hyperion.Context (in real apps, this comes from HTTP middleware)
+			// For now, we'll simulate it with a simple implementation
+			appCtx := newSimpleContext(ctx, logger)
+
+			appName := cfg.GetString("app.name")
+			logger.Info("application started", "app_name", appName)
+
+			// Create demo users
+			user1, err := userService.CreateUser(appCtx, "alice", "alice@example.com")
+			if err != nil {
+				return err
+			}
+			logger.Info("created demo user", "user_id", user1.ID, "username", user1.Username)
+
+			user2, err := userService.CreateUser(appCtx, "bob", "bob@example.com")
+			if err != nil {
+				return err
+			}
+			logger.Info("created demo user", "user_id", user2.ID, "username", user2.Username)
+
+			// List all users
+			users, err := userService.ListUsers(appCtx)
+			if err != nil {
+				return err
+			}
+
+			logger.Info("total users created", "count", len(users))
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			fmt.Println("Application stopped gracefully")
+			return nil
+		},
+	})
+}
+
+// simpleContext is a minimal hyperion.Context implementation for demo purposes
+// In production, use the context implementation from hyperweb or create your own
+type simpleContext struct {
+	context.Context
+	logger hyperion.Logger
+	tracer hyperion.Tracer
+}
+
+func newSimpleContext(ctx context.Context, logger hyperion.Logger) hyperion.Context {
+	return &simpleContext{
+		Context: ctx,
+		logger:  logger,
+		tracer:  &noopTracer{}, // Use NoOp tracer for demo
+	}
+}
+
+func (c *simpleContext) Logger() hyperion.Logger {
+	return c.logger
+}
+
+func (c *simpleContext) DB() hyperion.Executor {
+	// Not used in this demo (no database yet)
+	return nil
+}
+
+func (c *simpleContext) Tracer() hyperion.Tracer {
+	return c.tracer
+}
+
+func (c *simpleContext) WithTimeout(timeout time.Duration) (hyperion.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(c.Context, timeout)
+	return &simpleContext{Context: ctx, logger: c.logger, tracer: c.tracer}, cancel
+}
+
+func (c *simpleContext) WithCancel() (hyperion.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(c.Context)
+	return &simpleContext{Context: ctx, logger: c.logger, tracer: c.tracer}, cancel
+}
+
+func (c *simpleContext) WithDeadline(deadline time.Time) (hyperion.Context, context.CancelFunc) {
+	ctx, cancel := context.WithDeadline(c.Context, deadline)
+	return &simpleContext{Context: ctx, logger: c.logger, tracer: c.tracer}, cancel
+}
+
+// noopTracer is a simple no-op tracer for demo
+type noopTracer struct{}
+
+func (t *noopTracer) Start(ctx context.Context, spanName string, opts ...any) (context.Context, hyperion.Span) {
+	return ctx, &noopSpan{}
+}
+
+type noopSpan struct{}
+
+func (s *noopSpan) End(options ...any)                      {}
+func (s *noopSpan) AddEvent(name string, options ...any)    {}
+func (s *noopSpan) RecordError(err error, options ...any)   {}
+func (s *noopSpan) SetStatus(code hyperion.StatusCode, description string) {}
+func (s *noopSpan) SetAttributes(attributes ...any)         {}
+func (s *noopSpan) SetName(name string)                     {}
+func (s *noopSpan) TracerProvider() any                     { return nil }
 ```
 
----
-
-## Step 9: Database Migration
-
-Create `scripts/migrate.go`:
-
+**v2.0 Module Composition**:
 ```go
-package main
-
-import (
-    "log"
-
-    "github.com/yourusername/my-hyperion-app/internal/domain"
-    "gorm.io/driver/postgres"
-    "gorm.io/gorm"
+fx.New(
+    hyperion.CoreModule,      // Provides NoOp implementations
+    viper.Module,             // Overrides Config with Viper
+    // zap.Module,            // Would override Logger with Zap (when available)
+    // gorm.Module,           // Would override Database with GORM (when available)
+    repository.Module,
+    service.Module,
 )
-
-func main() {
-    dsn := "host=localhost user=test password=test dbname=testdb port=5432 sslmode=disable"
-    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-    if err != nil {
-        log.Fatalf("failed to connect database: %v", err)
-    }
-
-    // Auto migrate
-    if err := db.AutoMigrate(&domain.User{}); err != nil {
-        log.Fatalf("failed to migrate: %v", err)
-    }
-
-    log.Println("Migration completed successfully")
-}
-```
-
-Run migration:
-
-```bash
-go run scripts/migrate.go
 ```
 
 ---
 
-## Step 10: Run Application
+## Step 9: Configure Environment Variables
+
+The Viper adapter loads configuration from `configs/config.yaml` by default.
+
+Set environment variable to specify config file:
 
 ```bash
-# Start database (if using Docker)
-docker run --name postgres \
-  -e POSTGRES_USER=test \
-  -e POSTGRES_PASSWORD=test \
-  -e POSTGRES_DB=testdb \
-  -p 5432:5432 \
-  -d postgres:15
+export HYPERION_CONFIG_PATH=configs/config.yaml
+```
 
-# Run application
+Or rely on default search paths:
+- `./configs/config.yaml`
+- `./config.yaml`
+- `/etc/hyperion/config.yaml`
+
+---
+
+## Step 10: Run the Application
+
+```bash
+go mod tidy  # Download dependencies
 go run cmd/server/main.go
 ```
 
-You should see output similar to:
+Expected output (with NoOp logger - logs go nowhere by default):
 
 ```
-{"level":"info","timestamp":"2025-01-XX...","message":"checking database connectivity..."}
-{"level":"info","timestamp":"2025-01-XX...","message":"database connected successfully"}
-{"level":"info","timestamp":"2025-01-XX...","message":"starting web server","addr":"0.0.0.0:8080"}
+[Fx] PROVIDE	hyperion.Logger <= github.com/mapoio/hyperion.glob..func1()
+[Fx] PROVIDE	hyperion.Config <= github.com/mapoio/hyperion/adapter/viper.NewProviderFromEnv()
+[Fx] PROVIDE	repository.UserRepository <= github.com/yourusername/my-hyperion-app/internal/repository.NewMemoryUserRepository()
+[Fx] PROVIDE	service.UserService <= github.com/yourusername/my-hyperion-app/internal/service.NewUserService()
+[Fx] RUNNING
 ```
+
+**Note**: You won't see application logs because we're using NoOp logger by default. To see logs, you would install the Zap adapter (coming in v2.1).
 
 ---
 
-## Step 11: Test API
+## Understanding What Just Happened
 
-### Create User
+### 1. Core Module Provided NoOp Defaults
 
-```bash
-curl -X POST http://localhost:8080/api/v1/users \
-  -H "Content-Type: application/json" \
-  -d '{"username":"john","email":"john@example.com"}'
+```go
+hyperion.CoreModule  // Provides:
+// - NoOp Logger (logs nothing)
+// - NoOp Tracer (traces nothing)
+// - NoOp Database (does nothing)
+// - NoOp Config (returns empty values)
 ```
 
-Response:
+### 2. Viper Adapter Replaced Config
 
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "username": "john",
-  "email": "john@example.com",
-  "created_at": "2025-01-XX...",
-  "updated_at": "2025-01-XX..."
-}
+```go
+viper.Module  // Replaces NoOp Config with real Viper-based config
 ```
 
-### Get User
+fx automatically resolves that `viper.Module` provides `hyperion.Config`, so it uses that instead of NoOp.
 
-```bash
-curl http://localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000
-```
+### 3. Your Code Uses Interfaces Only
 
-### List All Users
-
-```bash
-curl http://localhost:8080/api/v1/users
-```
+Your service layer only knows about `hyperion.Context` and its accessor methods. It has **zero knowledge** of Viper, Zap, or any concrete implementation.
 
 ---
 
-## Project Structure Overview
+## Next Steps: Add Real Logger (Zap Adapter)
+
+When the Zap adapter is available (v2.1), you would simply:
+
+```go
+import "github.com/mapoio/hyperion/adapter/zap"
+
+fx.New(
+    hyperion.CoreModule,
+    viper.Module,
+    zap.Module,           // Add this line
+    repository.Module,
+    service.Module,
+)
+```
+
+Your application code **doesn't change at all**. The logger used by `ctx.Logger()` automatically becomes a real Zap logger.
+
+---
+
+## Next Steps: Add Database (GORM Adapter)
+
+When the GORM adapter is available (v2.1), you would:
+
+1. Install adapter:
+   ```bash
+   go get github.com/mapoio/hyperion/adapter/gorm
+   ```
+
+2. Add to application:
+   ```go
+   import "github.com/mapoio/hyperion/adapter/gorm"
+
+   fx.New(
+       hyperion.CoreModule,
+       viper.Module,
+       gorm.Module,      // Add this line
+       repository.Module,
+       service.Module,
+   )
+   ```
+
+3. Replace in-memory repository with GORM-based implementation:
+   ```go
+   func (r *gormUserRepository) Create(ctx hyperion.Context, user *domain.User) error {
+       // ctx.DB() now returns a real GORM database
+       return ctx.DB().Create(user).Error
+   }
+   ```
+
+---
+
+## Project Structure
 
 ```
 my-hyperion-app/
 ├── cmd/
 │   └── server/
-│       └── main.go              # Application entry point
+│       └── main.go              # Application entry (fx.New)
 ├── configs/
-│   └── config.yaml              # Configuration file
+│   └── config.yaml              # Configuration file (Viper reads this)
 ├── internal/
 │   ├── domain/
-│   │   └── user.go              # Domain models
-│   ├── handler/
-│   │   ├── user_handler.go      # HTTP handlers
-│   │   └── module.go
-│   ├── service/
-│   │   ├── user_service.go      # Business logic
-│   │   └── module.go
-│   └── repository/
-│       ├── user_repository.go   # Data access
-│       └── module.go
-├── scripts/
-│   └── migrate.go               # Database migration
+│   │   └── user.go              # Pure domain models (no framework deps)
+│   ├── repository/
+│   │   ├── user_repository.go   # Repository interface
+│   │   ├── user_memory_repository.go  # In-memory implementation
+│   │   └── module.go            # fx.Module
+│   └── service/
+│       ├── user_service.go      # Business logic (uses interfaces)
+│       └── module.go            # fx.Module
 ├── go.mod
 └── go.sum
 ```
 
----
-
-## Next Steps
-
-Congratulations! You've successfully created your first Hyperion application.
-
-### Learn More:
-
-1. **Add Caching**: Integrate `hypercache` module
-2. **Add Validation**: Use `hypervalidator`
-3. **Error Handling**: Deep dive into `hypererror`
-4. **Testing**: Write unit tests and integration tests
-5. **Deployment**: Containerize with Docker
-
-### View Complete Documentation:
-
-- [Architecture Design](architecture.md)
-- [Architecture Decisions](architecture-decisions.md)
-- [Implementation Plan](implementation-plan.md)
+**Key Points**:
+- `internal/domain`: Pure Go, no framework dependencies
+- `internal/service`: Uses `hyperion.Context` interface only
+- `internal/repository`: Implements your data access interfaces
+- `cmd/server`: Composes everything with fx modules
 
 ---
 
 ## FAQ
 
-### Q: How to enable debug logging?
+### Q: Why don't I see any logs?
 
-Modify `configs/config.yaml`:
-
-```yaml
-log:
-  level: debug
-  format: console  # More readable format
-```
-
-### Q: How to add health check endpoint?
-
-Add to `handler/module.go`:
+**A**: You're using the NoOp logger from `hyperion.CoreModule`. Install the Zap adapter when available (v2.1):
 
 ```go
-func RegisterRoutes(server *hyperweb.Server, userHandler *UserHandler) {
-    engine := server.Engine()
+import "github.com/mapoio/hyperion/adapter/zap"
 
-    // Health check
-    engine.GET("/health", func(c *gin.Context) {
-        c.JSON(200, gin.H{"status": "ok"})
-    })
+fx.New(
+    hyperion.CoreModule,
+    viper.Module,
+    zap.Module,  // Real logger
+    // ...
+)
+```
 
-    // ... other routes
+### Q: How do I test my services?
+
+**A**: Inject mock implementations:
+
+```go
+func TestUserService(t *testing.T) {
+    mockRepo := &mockUserRepository{}
+    service := NewUserService(mockRepo)
+
+    // Create mock context
+    ctx := &mockContext{
+        logger: &mockLogger{},
+        tracer: &mockTracer{},
+    }
+
+    user, err := service.CreateUser(ctx, "test", "test@example.com")
+    // assertions...
 }
 ```
 
-### Q: How to view tracing data?
+Since your service uses interfaces, testing is straightforward.
 
-1. Install Jaeger:
-   ```bash
-   docker run -d -p 16686:16686 -p 14268:14268 jaegertracing/all-in-one:latest
-   ```
+### Q: What's the difference from v1.0?
 
-2. Configure in `config.yaml`:
-   ```yaml
-   tracing:
-     enabled: true
-     exporter: jaeger
-     endpoint: "http://localhost:14268/api/traces"
-   ```
+**v1.0**:
+- Import: `github.com/mapoio/hyperion/pkg/hyperlog`
+- Bundled implementations (forced to use Zap, GORM, etc.)
+- Context exposed all methods directly
 
-3. Visit http://localhost:16686 to view traces
+**v2.0**:
+- Import: `github.com/mapoio/hyperion`
+- Choose your adapters (or write your own)
+- Context uses accessor pattern (`ctx.Logger()`, `ctx.Tracer()`)
+- Core library has ZERO lock-in (only depends on fx)
+
+### Q: Can I use sqlx instead of GORM?
+
+**A**: Yes! Write your own adapter:
+
+```go
+// adapter/sqlx/module.go
+package sqlx
+
+import (
+    "go.uber.org/fx"
+    "github.com/mapoio/hyperion"
+)
+
+var Module = fx.Module("hyperion.adapter.sqlx",
+    fx.Provide(
+        fx.Annotate(
+            NewSqlxDatabase,
+            fx.As(new(hyperion.Database)),
+        ),
+    ),
+)
+
+func NewSqlxDatabase(cfg hyperion.Config) (hyperion.Database, error) {
+    // Your sqlx implementation
+}
+```
+
+This is the **power of v2.0**: complete flexibility.
 
 ---
 
-**Happy Coding with Hyperion! 🚀**
+## Learn More
+
+### Core Concepts
+- [Architecture Overview](architecture.md) - Complete v2.0 architecture (2,531 lines)
+- [Architecture Decisions](architecture-decisions.md) - ADRs explaining design choices
+- [Coding Standards](architecture/coding-standards.md) - Best practices and conventions
+
+### Implementation Details
+- [Source Tree Guide](architecture/source-tree.md) - Monorepo structure
+- [Tech Stack](architecture/tech-stack.md) - Technology choices
+
+### Advanced Topics (Coming Soon)
+- Web Server (hyperweb with Gin) - v2.3
+- gRPC Server (hypergrpc) - v2.3
+- Transaction Management (UnitOfWork) - v2.1
+- Distributed Tracing (OpenTelemetry adapter) - v2.2
+
+---
+
+## What's Next?
+
+Now that you understand the basics:
+
+1. **Explore the Viper adapter source** to see how adapters work
+2. **Write your own adapter** for a library you prefer
+3. **Build a real application** with multiple layers
+4. **Wait for v2.1** for Zap and GORM adapters
+
+---
+
+**Welcome to Hyperion v2.0 - Zero Lock-in, Maximum Flexibility! 🚀**
+
+**Last Updated**: October 2025
+**Version**: 2.0 (Core-Adapter Architecture)

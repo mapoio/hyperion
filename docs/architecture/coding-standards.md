@@ -1,12 +1,16 @@
 # Hyperion Coding Standards
 
-This document defines the coding standards and best practices for Hyperion framework development.
+**Version**: 2.0
+**Date**: October 2025
+**Status**: Updated for Core-Adapter Architecture
+
+This document defines the coding standards and best practices for Hyperion framework v2.0 development.
 
 ---
 
 ## General Principles
 
-Hyperion follows the [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md) with additional framework-specific conventions.
+Hyperion follows the [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md) with additional framework-specific conventions for the v2.0 core-adapter architecture.
 
 ### Core Values
 
@@ -36,7 +40,9 @@ Imports should be organized in three groups:
 
 1. Standard library packages
 2. Third-party packages
-3. Local packages (prefixed with `github.com/mapoio/hyperion`)
+3. Framework and application packages
+
+**v2.0 Import Structure**:
 
 ```go
 import (
@@ -47,13 +53,24 @@ import (
 
     // Third-party
     "go.uber.org/fx"
-    "go.uber.org/zap"
 
-    // Local
-    "github.com/mapoio/hyperion/pkg/hyperctx"
-    "github.com/mapoio/hyperion/pkg/hyperlog"
+    // Framework core (NO pkg/ prefix in v2.0)
+    "github.com/mapoio/hyperion"
+
+    // Framework adapters
+    "github.com/mapoio/hyperion/adapter/viper"
+    "github.com/mapoio/hyperion/adapter/zap"
+
+    // Application packages
+    "github.com/your-app/internal/domain/user"
+    "github.com/your-app/internal/service"
 )
 ```
+
+**Key Changes from v1.0**:
+- ❌ No `pkg/` prefix: `github.com/mapoio/hyperion/pkg/hyperlog`
+- ✅ Direct import: `github.com/mapoio/hyperion`
+- ✅ Adapters: `github.com/mapoio/hyperion/adapter/{name}`
 
 ---
 
@@ -61,9 +78,19 @@ import (
 
 ### Package Names
 
+**v2.0 Structure**:
+
+- **Core library** (`hyperion/`): Single package, no prefix
+  - All core interfaces in one package: `hyperion.Logger`, `hyperion.Tracer`, `hyperion.Database`
+- **Adapters** (`adapter/*`): Named after underlying library
+  - `adapter/viper`, `adapter/zap`, `adapter/otel`, `adapter/gorm`
+- **Application packages**: Use descriptive domain names
+  - `internal/domain/user`, `internal/service`, `internal/repository`
+
+**Naming Rules**:
 - Use lowercase, single-word package names
-- Framework core components use `hyper*` prefix
-- Example: `hyperlog`, `hyperdb`, `hypercache`
+- No underscores or hyphens
+- Package name should match directory name
 
 ### Interface Names
 
@@ -71,12 +98,39 @@ import (
 - Examples: `Logger`, `Cache`, `Crypter` (not `ILogger`, `CacheInterface`)
 - Exception: When interface and implementation have the same concept, add `er` suffix
 
-```go
-// Good
-type Logger interface { ... }
-type ZapLogger struct { ... }
+**v2.0 Interface Design**:
 
-// Bad
+```go
+// Core library defines interfaces (hyperion/)
+package hyperion
+
+type Logger interface {
+    Debug(msg string, fields ...any)
+    Info(msg string, fields ...any)
+    // ...
+}
+
+// Adapters implement interfaces (adapter/zap/)
+package zap
+
+import "github.com/mapoio/hyperion"
+
+type zapLogger struct { /* implementation */ }
+
+func (l *zapLogger) Info(msg string, fields ...any) { /* ... */ }
+
+// Ensure interface compliance
+var _ hyperion.Logger = (*zapLogger)(nil)
+```
+
+**Good Practices**:
+```go
+// Good - Simple interface names
+type Logger interface { ... }
+type Tracer interface { ... }
+type Database interface { ... }
+
+// Bad - Unnecessary prefixes/suffixes
 type ILogger interface { ... }
 type LoggerInterface interface { ... }
 ```
@@ -149,25 +203,52 @@ user, _ := repo.FindByID(ctx, id)
 
 ### Error Wrapping
 
-- Use `fmt.Errorf` with `%w` verb (not `github.com/pkg/errors`)
-- Service layer: Return `hypererror` with business context
-- Repository layer: Wrap unexpected errors
+- Use `fmt.Errorf` with `%w` verb (standard library approach)
+- Service layer: Return errors with business context
+- Repository layer: Wrap database errors
+
+**v2.0 Error Handling**:
 
 ```go
-// Service layer
-if err != nil {
-    return nil, hypererror.Wrap(
-        hypererror.CodeInternal,
-        "failed to create user",
-        err,
-    ).WithField("email", email)
+// Service layer - Add business context
+func (s *UserService) CreateUser(ctx hyperion.Context, req CreateUserRequest) error {
+    if err := s.userRepo.Save(ctx, user); err != nil {
+        // Log with structured fields
+        ctx.Logger().Error("failed to create user",
+            "email", req.Email,
+            "error", err,
+        )
+        // Wrap with business context
+        return fmt.Errorf("failed to create user %s: %w", req.Email, err)
+    }
+    return nil
 }
 
-// Repository layer
-if err := db.Create(user).Error; err != nil {
-    return hypererror.InternalWrap("database operation failed", err)
+// Repository layer - Wrap database errors
+func (r *UserRepository) Save(ctx hyperion.Context, user *User) error {
+    if err := ctx.DB().Create(user).Error; err != nil {
+        return fmt.Errorf("database create operation failed: %w", err)
+    }
+    return nil
+}
+
+// Transaction handling with UnitOfWork
+func (s *UserService) RegisterUser(ctx hyperion.Context, req RegisterRequest) error {
+    return s.uow.WithTransaction(ctx, func(txCtx hyperion.Context) error {
+        // All operations within this function use txCtx.DB()
+        // which automatically uses the transaction
+        if err := s.userRepo.Save(txCtx, user); err != nil {
+            return fmt.Errorf("failed to save user: %w", err)
+        }
+        if err := s.profileRepo.Create(txCtx, profile); err != nil {
+            return fmt.Errorf("failed to create profile: %w", err)
+        }
+        return nil  // Commit on success
+    })  // Automatic rollback on error
 }
 ```
+
+**Note**: Hyperion v2.0 does NOT mandate a specific error library. Use standard `fmt.Errorf` or integrate your own error handling library as needed.
 
 ### Error Messages
 
@@ -187,12 +268,51 @@ return fmt.Errorf("Error!") // Not specific, not lowercase
 
 ## Context Handling
 
-### Context as First Parameter
+### v2.0 Context Design
 
-Always pass `context.Context` (or `hyperctx.Context`) as the first parameter:
+Hyperion v2.0 uses **accessor pattern** for the Context interface:
 
 ```go
-func (s *UserService) GetByID(ctx hyperctx.Context, id string) (*User, error)
+// Core interface (hyperion/context.go)
+type Context interface {
+    context.Context  // Embedded standard context
+
+    // Accessor methods - retrieve dependencies
+    Logger() Logger
+    DB() Executor
+    Tracer() Tracer
+
+    // Context management
+    WithTimeout(timeout time.Duration) (Context, context.CancelFunc)
+    WithCancel() (Context, context.CancelFunc)
+}
+```
+
+### Context as First Parameter
+
+Always pass `hyperion.Context` as the first parameter:
+
+```go
+// Service layer
+func (s *UserService) GetByID(ctx hyperion.Context, id string) (*User, error) {
+    // Access dependencies through accessors
+    _, span := ctx.Tracer().Start(ctx, "UserService.GetByID")
+    defer span.End()
+
+    ctx.Logger().Info("fetching user", "user_id", id)
+
+    return s.userRepo.FindByID(ctx, id)
+}
+
+// Repository layer
+func (r *UserRepository) FindByID(ctx hyperion.Context, id string) (*User, error) {
+    var user User
+    // ctx.DB() returns Executor (handles transaction propagation)
+    if err := ctx.DB().First(&user, "id = ?", id).Error; err != nil {
+        return nil, fmt.Errorf("failed to find user: %w", err)
+    }
+    return &user, nil
+}
 ```
 
 ### Never Store Context
@@ -202,11 +322,19 @@ Never store context in structs:
 ```go
 // Bad
 type Service struct {
-    ctx hyperctx.Context
+    ctx hyperion.Context
 }
 
 // Good
-func (s *Service) DoWork(ctx hyperctx.Context) error
+type Service struct {
+    logger hyperion.Logger  // Store dependencies, not context
+}
+
+func (s *Service) DoWork(ctx hyperion.Context) error {
+    // Use context from parameter, not stored field
+    ctx.Logger().Info("working...")
+    return nil
+}
 ```
 
 ---
@@ -234,10 +362,10 @@ type CreateUserRequest struct {
     Metadata map[string]any
 }
 
-func CreateUser(ctx hyperctx.Context, req CreateUserRequest) error
+func CreateUser(ctx hyperion.Context, req CreateUserRequest) error
 
 // Bad
-func CreateUser(ctx hyperctx.Context, username, email, password string, metadata map[string]any) error
+func CreateUser(ctx hyperion.Context, username, email, password string, metadata map[string]any) error
 ```
 
 ### Return Values
@@ -361,21 +489,65 @@ func assertUser(t *testing.T, expected, actual *User) {
 
 ### Package Documentation
 
-- Every package should have a `doc.go` file
+**v2.0 Documentation Standards**:
+
+- Every package should have a `doc.go` file (or package comment in main file)
 - Explain the package's purpose and usage
 
+**Core Library Example**:
+
 ```go
-// Package hyperlog provides structured logging capabilities for Hyperion applications.
+// Package hyperion provides the core interfaces and types for building
+// modular Go applications using dependency injection.
 //
-// It wraps go.uber.org/zap with a simplified interface and automatic trace context
-// injection. All loggers support dynamic level adjustment and multiple output targets.
+// Hyperion v2.0 follows a core-adapter pattern where this package defines
+// ONLY interfaces with zero 3rd-party dependencies (except go.uber.org/fx).
+// Concrete implementations are provided via adapters in the adapter/ directory.
+//
+// Basic usage with default NoOp implementations:
+//
+//     app := fx.New(
+//         hyperion.CoreModule,  // Provides NoOp defaults
+//         fx.Invoke(func(logger hyperion.Logger) {
+//             logger.Info("hello world")  // NoOp - does nothing
+//         }),
+//     )
+//
+// Usage with real implementations:
+//
+//     app := fx.New(
+//         hyperion.CoreWithoutDefaultsModule,  // No defaults
+//         viper.Module,  // Real Config implementation
+//         zap.Module,    // Real Logger implementation
+//         fx.Invoke(func(logger hyperion.Logger) {
+//             logger.Info("hello world")  // Real logging via Zap
+//         }),
+//     )
+//
+package hyperion
+```
+
+**Adapter Example**:
+
+```go
+// Package viper provides a Viper-based implementation of hyperion.Config
+// and hyperion.ConfigWatcher interfaces.
+//
+// This adapter wraps github.com/spf13/viper to provide configuration
+// management with support for multiple sources (files, environment variables,
+// remote config) and hot-reloading via file watching.
 //
 // Example usage:
 //
-//     logger, err := hyperlog.NewZapLogger(config)
-//     logger.Info("server started", "port", 8080)
+//     app := fx.New(
+//         viper.Module,  // Provides Config and ConfigWatcher
+//         fx.Invoke(func(cfg hyperion.Config) {
+//             port := cfg.GetInt("server.port")
+//             fmt.Printf("Port: %d\n", port)
+//         }),
+//     )
 //
-package hyperlog
+package viper
 ```
 
 ### Function Documentation
@@ -466,16 +638,35 @@ Hyperion follows the [AngularJS Commit Message Convention](https://github.com/an
 - `ci`: CI configuration changes
 - `chore`: Other changes
 
+### Scopes (v2.0)
+
+**Core Library**:
+- `core`: Core interfaces and types
+- `context`: Context abstraction
+- `module`: Module system
+
+**Adapters**:
+- `adapter/viper`: Viper config adapter
+- `adapter/zap`: Zap logger adapter
+- `adapter/otel`: OpenTelemetry tracer adapter
+- `adapter/gorm`: GORM database adapter
+
+**Documentation**:
+- `docs`: General documentation
+- `arch`: Architecture documentation
+
 ### Examples
 
 ```
-feat(hyperlog): add file rotation support
+feat(adapter/viper): add hot reload support
 
-fix(hyperdb): correct transaction rollback handling
+fix(core): correct Context interface accessor pattern
 
-docs: update quick start guide
+docs(arch): update architecture.md for v2.0
 
-refactor(hypererror): simplify error wrapping logic
+refactor(adapter/zap): simplify logger initialization
+
+feat(adapter/otel): add OpenTelemetry tracer implementation
 ```
 
 ---
@@ -494,4 +685,29 @@ Before submitting a PR, ensure:
 
 ---
 
-**Last Updated**: January 2025
+## v2.0 Migration Checklist
+
+When migrating existing code to v2.0:
+
+- [ ] Update import paths (remove `pkg/` prefix)
+  - `github.com/mapoio/hyperion/pkg/hyperlog` → `github.com/mapoio/hyperion`
+  - Add adapter imports: `github.com/mapoio/hyperion/adapter/viper`
+- [ ] Replace bundled implementations with adapters
+  - Remove direct Viper/Zap/GORM dependencies from main module
+  - Import adapters instead
+- [ ] Update context usage to accessor pattern
+  - Replace `ctx.Info(...)` with `ctx.Logger().Info(...)`
+  - Replace direct span creation with `ctx.Tracer().Start(...)`
+- [ ] Update module composition
+  - Use `hyperion.CoreModule` or `hyperion.CoreWithoutDefaultsModule`
+  - Add adapter modules (e.g., `viper.Module`, `zap.Module`)
+- [ ] Update error handling (if using custom error library)
+  - Adapt to standard `fmt.Errorf` or keep your error library
+- [ ] Review transaction management
+  - Use `UnitOfWork.WithTransaction(...)` for declarative transactions
+  - Access DB via `ctx.DB()` for automatic transaction propagation
+
+---
+
+**Last Updated**: October 2025
+**Version**: 2.0 (Core-Adapter Architecture)

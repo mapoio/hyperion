@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop, feature/* ]
+    branches: [ main, develop, feature/*, refactor/* ]
   pull_request:
     branches: [ main, develop ]
 
@@ -10,14 +10,18 @@ permissions:
   contents: read
   pull-requests: read
 
+env:
+  # Workspace modules (keep in sync with Makefile)
+  MODULES: "hyperion adapter/viper"
+
 jobs:
-  # Test job - runs tests with coverage
+  # Test job - runs tests with coverage across all modules
   test:
     name: Test (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.21', '1.22']
+        go-version: ['1.24']  # v2.0 requires Go 1.24 for workspace support
 
     steps:
       - name: Checkout code
@@ -28,38 +32,28 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
+          cache-dependency-path: |
+            go.work.sum
+            hyperion/go.sum
+            adapter/viper/go.sum
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Verify Go workspace
+        run: make check-workspace
 
-      - name: Verify dependencies
-        run: go mod verify
+      - name: Download and verify dependencies
+        run: make mod-verify
 
-      - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
-
-      - name: Generate coverage report
-        run: go tool cover -func=coverage.out
-
-      - name: Check coverage threshold
-        run: |
-          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          echo "Total coverage: $coverage%"
-          if (( $(echo "$coverage < 80" | bc -l) )); then
-            echo "❌ Coverage $coverage% is below threshold 80%"
-            exit 1
-          fi
-          echo "✅ Coverage $coverage% meets threshold"
+      - name: Run tests with coverage
+        run: make ci-test
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
-        if: matrix.go-version == '1.22'
         with:
-          file: ./coverage.out
+          files: ./hyperion/coverage.out,./adapter/viper/coverage.out
           flags: unittests
           name: codecov-umbrella
 
-  # Lint job - runs code quality checks
+  # Lint job - runs code quality checks across all modules
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -71,16 +65,27 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
           cache: true
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+      - name: Run golangci-lint (hyperion)
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
-          args: --timeout=5m
+          working-directory: hyperion
+          args: --config=../.golangci.yml --timeout=10m
 
-  # Build job - verifies the code builds
+      - name: Run golangci-lint (adapter/viper)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: adapter/viper
+          args: --config=../../.golangci.yml --timeout=10m
+
+      - name: Check code formatting
+        run: make check-format
+
+  # Build job - verifies all modules build
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -92,19 +97,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
           cache: true
 
-      - name: Build
-        run: go build -v ./...
+      - name: Build all modules
+        run: make build
 
-  # Security scan
+  # Security scan across all modules
   security:
     name: Security Scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write  # Required for uploading SARIF results
+      security-events: write
 
     steps:
       - name: Checkout code
@@ -113,20 +118,24 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: '-no-fail -fmt sarif -out results.sarif ./...'
+      - name: Run security scans
+        run: |
+          # Run security scan and generate SARIF for GitHub
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          for module in hyperion adapter/viper; do
+            echo "Security scanning $module..."
+            (cd $module && gosec -no-fail -fmt sarif -out ../results-$(basename $module).sarif ./...)
+          done
 
-      - name: Upload SARIF file
+      - name: Upload SARIF files
         uses: github/codeql-action/upload-sarif@v3
-        if: always()  # Upload results even if previous steps fail
+        if: always()
         with:
-          sarif_file: results.sarif
+          sarif_file: results-hyperion.sarif
 
-  # Dependency check
+  # Dependency check across all modules
   dependencies:
     name: Dependency Check
     runs-on: ubuntu-latest
@@ -138,19 +147,37 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
       - name: Check for vulnerable dependencies
-        continue-on-error: true  # Temporary: upstream issue with golang.org/x/text/encoding/unicode
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+        continue-on-error: true
+        run: make vuln-check
+
+  # Format check - ensures code is properly formatted
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install formatting tools
+        run: go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Check code formatting
+        run: make check-format
 
   # Status check - all jobs must pass
   ci-success:
     name: CI Success
     if: always()
-    needs: [test, lint, build, security, dependencies]
+    needs: [test, lint, build, security, dependencies, format]
     runs-on: ubuntu-latest
 
     steps:
@@ -160,7 +187,8 @@ jobs:
              [ "${{ needs.lint.result }}" != "success" ] || \
              [ "${{ needs.build.result }}" != "success" ] || \
              [ "${{ needs.security.result }}" != "success" ] || \
-             [ "${{ needs.dependencies.result }}" != "success" ]; then
+             [ "${{ needs.dependencies.result }}" != "success" ] || \
+             [ "${{ needs.format.result }}" != "success" ]; then
             echo "❌ CI failed"
             exit 1
           fi
