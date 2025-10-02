@@ -34,9 +34,10 @@ Hyperion is a **zero lock-in** Go backend framework built on the **core-adapter 
 - ✅ **Zero Lock-In**: Core interfaces with NoOp implementations, swap adapters at will
 - ✅ **Modular Architecture**: All features delivered as independent `fx.Module` packages
 - ✅ **Type-Safe Context**: `hyperion.Context` with integrated tracing, logging, and database access
-- ✅ **Production-Ready Adapters**: Zap (logging), Viper (config), GORM (database) with 90%+ test coverage
-- ✅ **Declarative Transactions**: UnitOfWork pattern with seamless transaction propagation (planned)
+- ✅ **Production-Ready Adapters**: Viper (config), Zap (logging), GORM (database) with 80%+ test coverage
+- ✅ **Declarative Transactions**: UnitOfWork pattern with automatic commit/rollback and panic recovery
 - ✅ **Hot Configuration Reload**: Viper-based config with file watching support
+- ✅ **Transaction Propagation**: Type-safe context-based transaction propagation via `hyperion.WithDB()`
 - ✅ **Interface-Driven Design**: Every component is mockable and testable
 
 ---
@@ -48,8 +49,9 @@ Hyperion is a **zero lock-in** Go backend framework built on the **core-adapter 
 ```bash
 # Add to your go.mod
 go get github.com/mapoio/hyperion/hyperion
-go get github.com/mapoio/hyperion/adapter/viper
-go get github.com/mapoio/hyperion/adapter/zap
+go get github.com/mapoio/hyperion/adapter/viper  # Configuration
+go get github.com/mapoio/hyperion/adapter/zap    # Logging
+go get github.com/mapoio/hyperion/adapter/gorm   # Database (optional)
 ```
 
 ### Minimal Example
@@ -135,7 +137,13 @@ hyperion/                          # Monorepo root
     │   ├── logger.go
     │   └── module.go
     │
-    ├── gorm/                      # 🔜 Database adapter (Planned)
+    ├── gorm/                      # ✅ Database adapter (Implemented)
+    │   ├── go.mod                 # Depends on: gorm.io/gorm
+    │   ├── database.go
+    │   ├── executor.go
+    │   ├── unit_of_work.go
+    │   └── module.go
+    │
     ├── otel/                      # 🔜 Tracer adapter (Planned)
     ├── ristretto/                 # 🔜 Cache adapter (Planned)
     └── redis/                     # 🔜 Cache adapter (Planned)
@@ -145,13 +153,15 @@ hyperion/                          # Monorepo root
 
 | Interface | Status | Adapter | Documentation |
 |-----------|--------|---------|---------------|
-| `Logger` | ✅ Implemented | `adapter/zap` | Structured logging with Zap |
-| `Config` | ✅ Implemented | `adapter/viper` | Configuration with file watching |
-| `ConfigWatcher` | ✅ Implemented | `adapter/viper` | Hot config reload |
-| `Database` | 🔜 Planned | `adapter/gorm` | Database access + transactions |
+| `Config` | ✅ Implemented | [adapter/viper](adapter/viper) | Configuration with file watching |
+| `ConfigWatcher` | ✅ Implemented | [adapter/viper](adapter/viper) | Hot config reload |
+| `Logger` | ✅ Implemented | [adapter/zap](adapter/zap) | Structured logging with Zap |
+| `Database` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Database access with GORM |
+| `Executor` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Query execution with transaction tracking |
+| `UnitOfWork` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Declarative transaction management |
 | `Tracer` | 🔜 Planned | `adapter/otel` | OpenTelemetry tracing |
 | `Cache` | 🔜 Planned | `adapter/ristretto` | In-memory caching |
-| `Context` | 🔜 Planned | `hyperion/context.go` | Type-safe request context |
+| `Context` | ✅ Implemented | [hyperion/context.go](hyperion/context.go) | Type-safe request context |
 
 ---
 
@@ -170,6 +180,7 @@ For detailed design rationale, see [Architecture Decisions](docs/architecture-de
 
 ## 📚 Documentation
 
+### Core Documentation
 - **[Architecture Guide](docs/architecture.md)**: Comprehensive framework design document
 - **[Quick Start](docs/quick-start.md)**: 10-minute tutorial with complete CRUD example
 - **[Coding Standards](docs/architecture/coding-standards.md)**: Development guidelines and best practices
@@ -178,15 +189,22 @@ For detailed design rationale, see [Architecture Decisions](docs/architecture-de
 - **[Architecture Decisions](docs/architecture-decisions.md)**: ADRs explaining key design choices
 - **[Implementation Plan](docs/implementation-plan.md)**: Development roadmap
 
+### Adapter Documentation
+- **[Adapter Overview](docs/adapters)**: Complete guide to all official adapters
+- **[Viper Adapter](adapter/viper/README.md)**: Configuration management guide
+- **[Zap Adapter](adapter/zap/README.md)**: Structured logging guide
+- **[GORM Adapter](adapter/gorm/README.md)**: Database access and transactions guide
+- **[Implementation Reports](docs/adapters/reports)**: Detailed implementation metrics and decisions
+
 ---
 
 ## 🛠️ Current Adapter Implementations
 
 | Adapter | Status | Version | Test Coverage | Purpose |
 |---------|--------|---------|---------------|---------|
-| **Viper** | ✅ Implemented | v1.20.0 | 95%+ | Config management with file watching |
-| **Zap** | ✅ Implemented | v1.27.0 | 93.9% | High-performance structured logging |
-| **GORM** | 🔜 Planned | v1.25.0+ | - | Database access + transactions |
+| **[Viper](adapter/viper)** | ✅ Implemented | v1.20.0 | 84.4% | Config management with hot reload |
+| **[Zap](adapter/zap)** | ✅ Implemented | v1.27.0 | 93.9% | High-performance structured logging |
+| **[GORM](adapter/gorm)** | ✅ Implemented | v1.25.12 | 82.1% | Database access with declarative transactions |
 | **OpenTelemetry** | 🔜 Planned | v1.33.0+ | - | Distributed tracing |
 | **Ristretto** | 🔜 Planned | v1.3.0+ | - | In-memory caching |
 | **Redis** | 🔜 Planned | v9.0.0+ | - | Distributed caching |
@@ -404,14 +422,14 @@ For testing best practices, see [Architecture Guide - Testing Strategy](docs/arc
 
 ### Current Phase: **Epic 2 - Essential Adapters** (v2.1)
 
-**Progress**: 🟢🟢🟢⚪⚪⚪ (2/6 stories completed)
+**Progress**: 🟢🟢🟢🟢⚪⚪ (3/5 stories completed)
 
 | Story | Status | Deliverable | Completion |
 |-------|--------|-------------|------------|
-| 2.0 | ✅ Complete | v2.0 Monorepo Migration | Oct 2025 |
-| 2.1 | ✅ Complete | Zap Logger Adapter | Oct 2025 |
-| 2.2 | 🔜 Planned | GORM Database Adapter | Dec 2025 |
-| 2.3 | 🔜 Planned | Production Context Implementation | Dec 2025 |
+| 2.0 | ✅ Complete | v2.0 Monorepo Migration | Oct 2, 2025 |
+| 2.1 | ✅ Complete | Zap Logger Adapter (93.9% coverage) | Oct 2, 2025 |
+| 2.2 | ✅ Complete | GORM Database Adapter (82.1% coverage) | Oct 2, 2025 |
+| 2.3 | 🔜 Planned | Ristretto Cache Adapter | Dec 2025 |
 | 2.4 | 🔜 Planned | Example CRUD Application | Dec 2025 |
 
 ### Epic Overview
@@ -422,11 +440,12 @@ For testing best practices, see [Architecture Guide - Testing Strategy](docs/arc
 - fx.Module integration
 - Comprehensive documentation
 
-**🔄 Epic 2: Essential Adapters** (In Progress)
-- ✅ Viper adapter (Config + ConfigWatcher)
-- ✅ Zap adapter (Logger with 93.9% coverage)
-- 🔜 GORM adapter (Database + UnitOfWork)
-- 🔜 Production Context (hyperion.Context)
+**✅ Epic 2: Essential Adapters** (60% Complete)
+- ✅ Viper adapter (Config + ConfigWatcher, 84.4% coverage)
+- ✅ Zap adapter (Logger, 93.9% coverage)
+- ✅ GORM adapter (Database + Executor + UnitOfWork, 82.1% coverage)
+- 🔜 Ristretto adapter (Cache, planned)
+- 🔜 Example CRUD Application (planned)
 
 **🔜 Epic 3: Observability** (Planned Q1 2026)
 - OpenTelemetry tracer adapter
