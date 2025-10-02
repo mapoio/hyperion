@@ -105,7 +105,7 @@ deps: ## Download dependencies for all modules
 	@echo "✓ All dependencies updated"
 
 .PHONY: verify
-verify: fmt lint test ## Verify code (format, lint, test)
+verify: check-format lint test ## Verify code (format check, lint, test)
 	@echo "✓ All verification passed"
 
 .PHONY: check-commit
@@ -300,6 +300,128 @@ quality-report: ## Generate detailed code quality report (matches CI)
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GitHub-Agnostic CI Checks (used by both local dev and CI/CD)
+# These targets can be used with any CI provider (GitHub, GitLab, etc.)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+.PHONY: check-workspace
+check-workspace: ## Verify Go workspace configuration
+	@echo "Verifying Go workspace configuration..."
+	@go work sync
+	@echo "✓ Workspace verified"
+
+.PHONY: mod-verify
+mod-verify: ## Verify module dependencies
+	@echo "Verifying dependencies for all modules..."
+	@for module in $(MODULES); do \
+		echo "Verifying dependencies for $$module..."; \
+		(cd $$module && go mod download && go mod verify) || exit 1; \
+	done
+	@echo "✓ All dependencies verified"
+
+.PHONY: check-large-files
+check-large-files: ## Check for large files (>1MB)
+	@echo "Checking for large files (>1MB)..."
+	@large_files=$$(find . -type f -size +1M -not -path "./.git/*" -not -path "./vendor/*" -not -path "./.idea/*" -not -path "./.vscode/*" 2>/dev/null || true); \
+	if [ -n "$$large_files" ]; then \
+		echo "❌ Large files detected (>1MB):"; \
+		echo "$$large_files"; \
+		exit 1; \
+	fi
+	@echo "✓ No large files detected"
+
+.PHONY: check-conflicts
+check-conflicts: ## Check for merge conflict markers
+	@echo "Checking for merge conflict markers..."
+	@conflicts=$$(grep -rE '(<{7} HEAD|>{7})' . --exclude-dir=.git --exclude-dir=vendor --exclude-dir=.idea --exclude-dir=.vscode 2>/dev/null || true); \
+	if [ -n "$$conflicts" ]; then \
+		echo "❌ Merge conflict markers detected:"; \
+		echo "$$conflicts"; \
+		exit 1; \
+	fi
+	@echo "✓ No merge conflicts detected"
+
+.PHONY: lint-commits
+lint-commits: ## Validate commit messages (conventional commits)
+	@echo "Validating commit messages..."
+	@if git rev-parse --verify origin/main >/dev/null 2>&1; then \
+		commits=$$(git log --format=%s --no-merges origin/main..HEAD 2>/dev/null || git log --format=%s --no-merges -10); \
+		echo "$$commits" | while IFS= read -r commit; do \
+			[ -z "$$commit" ] && continue; \
+			if ! echo "$$commit" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+'; then \
+				echo "❌ Invalid commit message: $$commit"; \
+				echo "Expected format: type(scope): description"; \
+				exit 1; \
+			fi; \
+		done; \
+	else \
+		echo "⚠️  No origin/main branch found, skipping commit message validation"; \
+	fi
+	@echo "✓ All commit messages are valid"
+
+.PHONY: coverage-report
+coverage-report: test ## Generate detailed coverage report with statistics
+	@echo "━━━━━━━━━━━━━━━━━━━━━━ Coverage Report ━━━━━━━━━━━━━━━━━━━━━━"
+	@total_coverage=0; \
+	module_count=0; \
+	for module in $(MODULES); do \
+		if [ -f $$module/coverage.out ]; then \
+			coverage=$$(cd $$module && go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+			echo "📊 $$module: $$coverage%"; \
+			total_coverage=$$(echo "$$total_coverage + $$coverage" | bc); \
+			module_count=$$((module_count + 1)); \
+		fi \
+	done; \
+	if [ $$module_count -gt 0 ]; then \
+		avg_coverage=$$(echo "scale=2; $$total_coverage / $$module_count" | bc); \
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+		echo "📈 Average Coverage: $$avg_coverage%"; \
+		echo "🎯 Threshold: 80%"; \
+		if [ $$(echo "$$avg_coverage >= 80" | bc -l) -eq 1 ]; then \
+			echo "✅ PASS: Coverage meets threshold"; \
+		else \
+			echo "❌ FAIL: Coverage below threshold"; \
+		fi; \
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+	fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CI Pipeline Targets (Platform Agnostic)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+.PHONY: ci-pre
+ci-pre: check-workspace mod-verify ## Run pre-CI checks (workspace and dependencies)
+	@echo "✓ Pre-CI checks complete"
+
+.PHONY: ci-test
+ci-test: test check-coverage ## Run CI test suite with coverage validation
+	@echo "✓ CI tests complete"
+
+.PHONY: ci-lint
+ci-lint: check-format lint ## Run CI linting checks
+	@echo "✓ CI linting complete"
+
+.PHONY: ci-security
+ci-security: security vuln-check ## Run CI security scans
+	@echo "✓ CI security checks complete"
+
+.PHONY: ci-quality
+ci-quality: quality ## Run CI code quality checks
+	@echo "✓ CI quality checks complete"
+
+.PHONY: ci-pr
+ci-pr: check-large-files check-conflicts lint-commits ## Run PR-specific checks
+	@echo "✓ PR checks complete"
+
 .PHONY: ci
-ci: deps check-format lint test check-coverage build security quality ## Run complete CI pipeline locally (matches GitHub Actions)
-	@echo "✓ CI pipeline completed successfully"
+ci: ci-pre ci-lint ci-test ci-security ci-quality build ## Run complete CI pipeline (matches GitHub Actions)
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✅ Complete CI pipeline passed successfully"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+.PHONY: ci-full
+ci-full: ci ci-pr coverage-report quality-report ## Run full CI pipeline with detailed reports
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✅ Full CI pipeline with reports completed"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

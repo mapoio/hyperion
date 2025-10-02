@@ -38,51 +38,13 @@ jobs:
             adapter/viper/go.sum
 
       - name: Verify Go workspace
-        run: |
-          echo "Verifying Go workspace configuration..."
-          go work sync
-          cat go.work
+        run: make check-workspace
 
-      - name: Download dependencies
-        run: |
-          echo "Downloading dependencies for all modules..."
-          for module in $MODULES; do
-            echo "Downloading dependencies for $module..."
-            (cd $module && go mod download && go mod verify) || exit 1
-          done
+      - name: Download and verify dependencies
+        run: make mod-verify
 
       - name: Run tests with coverage
-        run: |
-          echo "Running tests across all modules..."
-          for module in $MODULES; do
-            echo "Testing $module..."
-            (cd $module && go test -v -race -coverprofile=coverage.out -covermode=atomic ./...) || exit 1
-          done
-
-      - name: Generate coverage reports
-        run: |
-          echo "Generating coverage reports..."
-          for module in $MODULES; do
-            if [ -f $module/coverage.out ]; then
-              echo "Coverage for $module:"
-              (cd $module && go tool cover -func=coverage.out)
-            fi
-          done
-
-      - name: Check coverage threshold
-        run: |
-          echo "Checking coverage threshold (80%)..."
-          for module in $MODULES; do
-            if [ -f $module/coverage.out ]; then
-              coverage=$(cd $module && go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-              echo "$module coverage: $coverage%"
-              if (( $(echo "$coverage < 80" | bc -l) )); then
-                echo "❌ $module coverage $coverage% is below threshold 80%"
-                exit 1
-              fi
-            fi
-          done
-          echo "✅ All modules meet coverage threshold"
+        run: make ci-test
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -106,19 +68,13 @@ jobs:
           go-version: '1.24'
           cache: true
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: latest
-          args: --timeout=10m
-          working-directory: hyperion
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
-      - name: Run golangci-lint on adapter/viper
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: latest
-          args: --timeout=10m
-          working-directory: adapter/viper
+      - name: Run linting checks
+        run: make ci-lint
 
   # Build job - verifies all modules build
   build:
@@ -136,13 +92,7 @@ jobs:
           cache: true
 
       - name: Build all modules
-        run: |
-          echo "Building all modules..."
-          for module in $MODULES; do
-            echo "Building $module..."
-            (cd $module && go build -v ./...) || exit 1
-          done
-          echo "✅ All builds complete"
+        run: make build
 
   # Security scan across all modules
   security:
@@ -161,10 +111,11 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Run Gosec Security Scanner
+      - name: Run security scans
         run: |
+          # Run security scan and generate SARIF for GitHub
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          for module in $MODULES; do
+          for module in hyperion adapter/viper; do
             echo "Security scanning $module..."
             (cd $module && gosec -no-fail -fmt sarif -out ../results-$(basename $module).sarif ./...)
           done
@@ -191,12 +142,7 @@ jobs:
 
       - name: Check for vulnerable dependencies
         continue-on-error: true
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          for module in $MODULES; do
-            echo "Checking vulnerabilities in $module..."
-            (cd $module && govulncheck ./...)
-          done
+        run: make vuln-check
 
   # Format check - ensures code is properly formatted
   format:
@@ -212,19 +158,11 @@ jobs:
         with:
           go-version: '1.24'
 
+      - name: Install formatting tools
+        run: go install golang.org/x/tools/cmd/goimports@latest
+
       - name: Check code formatting
-        run: |
-          go install golang.org/x/tools/cmd/goimports@latest
-          for module in $MODULES; do
-            echo "Checking format for $module..."
-            unformatted=$(cd $module && gofmt -l .)
-            if [ -n "$unformatted" ]; then
-              echo "❌ The following files are not formatted:"
-              echo "$unformatted"
-              exit 1
-            fi
-          done
-          echo "✅ All code is properly formatted"
+        run: make check-format
 
   # Status check - all jobs must pass
   ci-success:
