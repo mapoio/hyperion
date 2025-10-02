@@ -51,13 +51,31 @@ jobs:
 
               # Run gocyclo for cyclomatic complexity
               cd "$module"
+
+              # Count total functions (including methods)
+              # Use gocyclo output to get actual function count (it analyzes all functions)
+              all_funcs_output=$(gocyclo -over 0 . 2>/dev/null || echo "")
+              if [ -n "$all_funcs_output" ]; then
+                module_funcs=$(echo "$all_funcs_output" | wc -l | tr -d ' ')
+              else
+                module_funcs=0
+              fi
+
+              # Count high complexity functions
               gocyclo_output=$(gocyclo -over 15 . 2>/dev/null || echo "")
-              module_funcs=$(find . -name "*.go" -not -path "*/vendor/*" -exec grep -c "^func " {} + | awk '{s+=$1} END {print s}' || echo 0)
-              module_high_cyclo=$(echo "$gocyclo_output" | wc -l | tr -d ' ')
+              if [ -n "$gocyclo_output" ]; then
+                module_high_cyclo=$(echo "$gocyclo_output" | wc -l | tr -d ' ')
+              else
+                module_high_cyclo=0
+              fi
 
               # Run gocognit for cognitive complexity
               gocognit_output=$(gocognit -over 20 . 2>/dev/null || echo "")
-              module_high_cognit=$(echo "$gocognit_output" | wc -l | tr -d ' ')
+              if [ -n "$gocognit_output" ]; then
+                module_high_cognit=$(echo "$gocognit_output" | wc -l | tr -d ' ')
+              else
+                module_high_cognit=0
+              fi
 
               # Run dupl for code duplication
               dupl_output=$(dupl -threshold 50 -files . 2>/dev/null || echo "")
