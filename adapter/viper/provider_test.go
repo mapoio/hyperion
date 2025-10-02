@@ -461,3 +461,34 @@ func TestProviderWatchStop(t *testing.T) {
 		// Expected: callback not invoked
 	}
 }
+
+// TestProviderWatchRapidStartStop tests that rapid start/stop sequences don't cause panics
+func TestProviderWatchRapidStartStop(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	if err := os.WriteFile(configPath, []byte("value: 1"), 0o644); err != nil {
+		t.Fatalf("Failed to create test config: %v", err)
+	}
+
+	provider, err := viperadapter.NewProvider(configPath)
+	if err != nil {
+		t.Fatalf("NewProvider failed: %v", err)
+	}
+
+	// Test rapid start/stop sequences (potential race condition)
+	for i := range 10 {
+		stop, err := provider.Watch(func(event hyperion.ChangeEvent) {
+			// Empty callback
+		})
+		if err != nil {
+			t.Fatalf("Watch failed on iteration %d: %v", i, err)
+		}
+
+		// Immediately stop without giving watchLoop time to start
+		stop()
+	}
+
+	// If we get here without panicking, the fix works
+	time.Sleep(100 * time.Millisecond) // Give goroutines time to clean up
+}

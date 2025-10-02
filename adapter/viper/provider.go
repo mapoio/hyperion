@@ -209,6 +209,11 @@ func (p *Provider) Watch(callback func(event hyperion.ChangeEvent)) (stop func()
 func (p *Provider) watchLoop() {
 	// Get channels with lock to avoid races during shutdown
 	p.mu.RLock()
+	// Guard against nil watcher in case stop() is called before this goroutine starts
+	if p.watcher == nil || p.watchDone == nil {
+		p.mu.RUnlock()
+		return
+	}
 	eventsC := p.watcher.Events
 	errorsC := p.watcher.Errors
 	doneC := p.watchDone
