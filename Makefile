@@ -265,7 +265,7 @@ quality: check-cyclo check-cognit check-dupl ## Run all code quality checks (mat
 
 .PHONY: quality-report
 quality-report: ## Generate detailed code quality report (matches CI)
-	@echo "==================== Code Quality Report ===================="
+	@echo "━━━━━━━━━━━━━━━━━━━━━━ Code Quality Report ━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📊 Cyclomatic Complexity:"
 	@command -v gocyclo >/dev/null 2>&1 || go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
@@ -298,7 +298,7 @@ quality-report: ## Generate detailed code quality report (matches CI)
 		echo "  ✓ No significant code duplication detected (threshold: 50 tokens)"; \
 	fi
 	@echo ""
-	@echo "=============================================================="
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 .PHONY: ci
 ci: deps check-format lint test check-coverage build security quality ## Run complete CI pipeline locally (matches GitHub Actions)
