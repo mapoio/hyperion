@@ -67,34 +67,30 @@ func (c *hyperionContext) Tracer() Tracer {
 	return c.tracer
 }
 
-func (c *hyperionContext) WithTimeout(timeout time.Duration) (Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(c.Context, timeout)
+// withContext is a helper method to create a new hyperionContext with a different underlying context.
+// It preserves all the other fields (logger, db, tracer) from the current context.
+func (c *hyperionContext) withContext(ctx context.Context) *hyperionContext {
 	return &hyperionContext{
 		Context: ctx,
 		logger:  c.logger,
 		db:      c.db,
 		tracer:  c.tracer,
-	}, cancel
+	}
+}
+
+func (c *hyperionContext) WithTimeout(timeout time.Duration) (Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(c.Context, timeout)
+	return c.withContext(ctx), cancel
 }
 
 func (c *hyperionContext) WithCancel() (Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(c.Context)
-	return &hyperionContext{
-		Context: ctx,
-		logger:  c.logger,
-		db:      c.db,
-		tracer:  c.tracer,
-	}, cancel
+	return c.withContext(ctx), cancel
 }
 
 func (c *hyperionContext) WithDeadline(deadline time.Time) (Context, context.CancelFunc) {
 	ctx, cancel := context.WithDeadline(c.Context, deadline)
-	return &hyperionContext{
-		Context: ctx,
-		logger:  c.logger,
-		db:      c.db,
-		tracer:  c.tracer,
-	}, cancel
+	return c.withContext(ctx), cancel
 }
 
 // WithDB returns a new Context with the specified database executor.
