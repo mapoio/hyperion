@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"dario.cat/mergo"
+	"github.com/go-playground/validator/v10"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -26,34 +28,39 @@ const (
 // Fields are ordered for optimal memory alignment (larger types first).
 type Config struct {
 	// String fields (16 bytes on 64-bit: 8-byte pointer + 8-byte length)
-	Driver   string `json:"driver" yaml:"driver"`       // Driver specifies the database driver (postgres, mysql, sqlite)
-	DSN      string `json:"dsn" yaml:"dsn"`             // DSN allows providing a complete connection string
-	Host     string `json:"host" yaml:"host"`           // Connection host
-	Username string `json:"username" yaml:"username"`   // Connection username
-	Password string `json:"password" yaml:"password"`   // Connection password
-	Database string `json:"database" yaml:"database"`   // Database name
-	SSLMode  string `json:"sslmode" yaml:"sslmode"`     // PostgreSQL SSL mode
+	Driver   string `json:"driver" yaml:"driver" validate:"required,oneof=postgres mysql sqlite"` // Driver specifies the database driver (postgres, mysql, sqlite)
+	DSN      string `json:"dsn" yaml:"dsn"`                                                       // DSN allows providing a complete connection string
+	Host     string `json:"host" yaml:"host" validate:"omitempty,hostname|ip"`                    // Connection host
+	Username string `json:"username" yaml:"username"`                                             // Connection username
+	Password string `json:"password" yaml:"password"`                                             // Connection password
+	Database string `json:"database" yaml:"database"`                                             // Database name (required for non-SQLite unless DSN provided)
+	SSLMode  string `json:"sslmode" yaml:"sslmode" validate:"omitempty,oneof=disable require verify-ca verify-full"`
 	Charset  string `json:"charset" yaml:"charset"`     // MySQL charset
 	LogLevel string `json:"log_level" yaml:"log_level"` // Log level: silent, error, warn, info
 
 	// Duration fields (8 bytes each)
-	ConnMaxLifetime time.Duration `json:"conn_max_lifetime" yaml:"conn_max_lifetime"`
-	ConnMaxIdleTime time.Duration `json:"conn_max_idle_time" yaml:"conn_max_idle_time"`
-	SlowThreshold   time.Duration `json:"slow_threshold" yaml:"slow_threshold"`
+	ConnMaxLifetime time.Duration `json:"conn_max_lifetime" yaml:"conn_max_lifetime" validate:"omitempty,min=0"`
+	ConnMaxIdleTime time.Duration `json:"conn_max_idle_time" yaml:"conn_max_idle_time" validate:"omitempty,min=0"`
+	SlowThreshold   time.Duration `json:"slow_threshold" yaml:"slow_threshold" validate:"omitempty,min=0"`
 
 	// Int fields (8 bytes on 64-bit)
-	MaxOpenConns int `json:"max_open_conns" yaml:"max_open_conns"`
-	MaxIdleConns int `json:"max_idle_conns" yaml:"max_idle_conns"`
-	Port         int `json:"port" yaml:"port"`
+	MaxOpenConns int `json:"max_open_conns" yaml:"max_open_conns" validate:"omitempty,min=0"`
+	MaxIdleConns int `json:"max_idle_conns" yaml:"max_idle_conns" validate:"omitempty,min=0"`
+	Port         int `json:"port" yaml:"port" validate:"omitempty,min=1,max=65535"`
 
-	// Bool fields (1 byte each) - put last to minimize padding
-	SkipDefaultTransaction bool `json:"skip_default_transaction" yaml:"skip_default_transaction"`
-	PrepareStmt            bool `json:"prepare_stmt" yaml:"prepare_stmt"`
-	AutoMigrate            bool `json:"auto_migrate" yaml:"auto_migrate"`
+	// Bool fields (1 byte each) - use pointers to distinguish unset from false
+	// Using pointers allows us to differentiate between "not provided" (nil) and "explicitly set to false"
+	SkipDefaultTransaction *bool `json:"skip_default_transaction" yaml:"skip_default_transaction"`
+	PrepareStmt            *bool `json:"prepare_stmt" yaml:"prepare_stmt"`
+	AutoMigrate            *bool `json:"auto_migrate" yaml:"auto_migrate"`
 }
 
 // DefaultConfig returns a configuration with sensible defaults.
 func DefaultConfig() *Config {
+	skipDefaultTransaction := false
+	prepareStmt := true
+	autoMigrate := false
+
 	return &Config{
 		Driver:                 DriverSQLite,
 		Database:               "hyperion.db",
@@ -67,9 +74,9 @@ func DefaultConfig() *Config {
 		ConnMaxIdleTime:        10 * time.Minute,
 		LogLevel:               "warn",
 		SlowThreshold:          200 * time.Millisecond,
-		SkipDefaultTransaction: false,
-		PrepareStmt:            true,
-		AutoMigrate:            false,
+		SkipDefaultTransaction: &skipDefaultTransaction,
+		PrepareStmt:            &prepareStmt,
+		AutoMigrate:            &autoMigrate,
 	}
 }
 
@@ -105,169 +112,68 @@ func NewGormUnitOfWork(db hyperion.Database) hyperion.UnitOfWork {
 	return &gormUnitOfWork{db: gdb.db}
 }
 
-// loadConfig loads configuration from hyperion.Config and merges with defaults.
-// It unmarshals into a temporary struct to preserve default values for unset fields.
-// Tries loading from both "database" prefix and root level, merging both results.
+// loadConfig loads configuration from hyperion.Config and merges with defaults using mergo.
+// It unmarshals from both "database" prefix and root level, with root taking precedence.
+// Uses mergo for clean struct merging, with special handling for boolean pointers.
 func loadConfig(src hyperion.Config, dst *Config) error {
-	// Unmarshal into temporary struct to avoid overwriting defaults
-	var temp Config
+	// Load prefixed configuration (database.*)
+	var prefixed Config
+	_ = src.Unmarshal("database", &prefixed)
 
-	// Try loading with "database" prefix first
-	// Note: Viper returns nil even when key doesn't exist, so we can't rely on error
-	_ = src.Unmarshal("database", &temp)
+	// Load root-level configuration (driver, host, etc.)
+	var root Config
+	_ = src.Unmarshal("", &root)
 
-	// Also try root level config (without prefix) to support both styles:
-	// 1. database.driver (prefixed)
-	// 2. driver (root level)
-	// Both are valid and will be merged (root level takes precedence if both exist)
-	var rootTemp Config
-	_ = src.Unmarshal("", &rootTemp)
-
-	// Merge root-level values into temp (root takes precedence over prefixed)
-	mergeConfigValues(&temp, &rootTemp)
-
-	// Merge non-zero values from temp into dst, preserving defaults
-	if temp.Driver != "" {
-		dst.Driver = temp.Driver
-	}
-	if temp.Host != "" {
-		dst.Host = temp.Host
-	}
-	if temp.Port != 0 {
-		dst.Port = temp.Port
-	}
-	if temp.Username != "" {
-		dst.Username = temp.Username
-	}
-	if temp.Password != "" {
-		dst.Password = temp.Password
-	}
-	if temp.Database != "" {
-		dst.Database = temp.Database
-	}
-	if temp.DSN != "" {
-		dst.DSN = temp.DSN
-	}
-	if temp.SSLMode != "" {
-		dst.SSLMode = temp.SSLMode
-	}
-	if temp.Charset != "" {
-		dst.Charset = temp.Charset
-	}
-	if temp.MaxOpenConns != 0 {
-		dst.MaxOpenConns = temp.MaxOpenConns
-	}
-	if temp.MaxIdleConns != 0 {
-		dst.MaxIdleConns = temp.MaxIdleConns
-	}
-	if temp.ConnMaxLifetime != 0 {
-		dst.ConnMaxLifetime = temp.ConnMaxLifetime
-	}
-	if temp.ConnMaxIdleTime != 0 {
-		dst.ConnMaxIdleTime = temp.ConnMaxIdleTime
-	}
-	if temp.SlowThreshold != 0 {
-		dst.SlowThreshold = temp.SlowThreshold
-	}
-	if temp.LogLevel != "" {
-		dst.LogLevel = temp.LogLevel
+	// Merge configurations: root overrides prefixed
+	// mergo.WithOverride allows root values to override prefixed values
+	if err := mergo.Merge(&prefixed, root, mergo.WithOverride); err != nil {
+		return fmt.Errorf("failed to merge root config: %w", err)
 	}
 
-	// Boolean fields - check if key is explicitly set (to handle false values)
-	// We use IsSet to distinguish between "not provided" and "explicitly set to false"
-	if src.IsSet("database.skip_default_transaction") || src.IsSet("skip_default_transaction") {
-		dst.SkipDefaultTransaction = temp.SkipDefaultTransaction
+	// Merge loaded config into dst, preserving defaults for unset fields
+	// mergo.WithOverride ensures user config overrides defaults
+	if err := mergo.Merge(dst, prefixed, mergo.WithOverride); err != nil {
+		return fmt.Errorf("failed to merge config: %w", err)
 	}
-	if src.IsSet("database.prepare_stmt") || src.IsSet("prepare_stmt") {
-		dst.PrepareStmt = temp.PrepareStmt
+
+	// Special handling for boolean pointers: mergo doesn't override non-nil pointers
+	// We manually copy pointer fields if they are set in the source (non-nil)
+	if prefixed.SkipDefaultTransaction != nil {
+		dst.SkipDefaultTransaction = prefixed.SkipDefaultTransaction
 	}
-	if src.IsSet("database.auto_migrate") || src.IsSet("auto_migrate") {
-		dst.AutoMigrate = temp.AutoMigrate
+	if prefixed.PrepareStmt != nil {
+		dst.PrepareStmt = prefixed.PrepareStmt
+	}
+	if prefixed.AutoMigrate != nil {
+		dst.AutoMigrate = prefixed.AutoMigrate
 	}
 
 	return nil
 }
 
-// mergeConfigValues merges non-zero values from src into dst.
-// This allows root-level config to override prefixed config.
-func mergeConfigValues(dst, src *Config) {
-	if src.Driver != "" {
-		dst.Driver = src.Driver
-	}
-	if src.Host != "" {
-		dst.Host = src.Host
-	}
-	if src.Port != 0 {
-		dst.Port = src.Port
-	}
-	if src.Username != "" {
-		dst.Username = src.Username
-	}
-	if src.Password != "" {
-		dst.Password = src.Password
-	}
-	if src.Database != "" {
-		dst.Database = src.Database
-	}
-	if src.DSN != "" {
-		dst.DSN = src.DSN
-	}
-	if src.SSLMode != "" {
-		dst.SSLMode = src.SSLMode
-	}
-	if src.Charset != "" {
-		dst.Charset = src.Charset
-	}
-	if src.MaxOpenConns != 0 {
-		dst.MaxOpenConns = src.MaxOpenConns
-	}
-	if src.MaxIdleConns != 0 {
-		dst.MaxIdleConns = src.MaxIdleConns
-	}
-	if src.ConnMaxLifetime != 0 {
-		dst.ConnMaxLifetime = src.ConnMaxLifetime
-	}
-	if src.ConnMaxIdleTime != 0 {
-		dst.ConnMaxIdleTime = src.ConnMaxIdleTime
-	}
-	if src.SlowThreshold != 0 {
-		dst.SlowThreshold = src.SlowThreshold
-	}
-	if src.LogLevel != "" {
-		dst.LogLevel = src.LogLevel
-	}
-	if src.SkipDefaultTransaction {
-		dst.SkipDefaultTransaction = src.SkipDefaultTransaction
-	}
-	if src.PrepareStmt {
-		dst.PrepareStmt = src.PrepareStmt
-	}
-	if src.AutoMigrate {
-		dst.AutoMigrate = src.AutoMigrate
-	}
-}
-
-// Validate checks if the configuration is valid.
+// Validate checks if the configuration is valid using validator.
+// Validation rules are defined in struct tags (validate:"...").
+// Additional custom validation is performed after struct validation.
 func (c *Config) Validate() error {
-	if c.Driver == "" {
-		return fmt.Errorf("driver is required")
-	}
+	// Run struct-level validation based on tags
+	validate := validator.New()
 
-	validDrivers := map[string]bool{
-		DriverPostgres: true,
-		DriverMySQL:    true,
-		DriverSQLite:   true,
-	}
-
-	if !validDrivers[c.Driver] {
-		return fmt.Errorf("unsupported driver: %s (supported: postgres, mysql, sqlite)", c.Driver)
-	}
-
-	if c.DSN == "" {
-		// Validate individual connection parameters
-		if c.Driver != DriverSQLite && c.Database == "" {
-			return fmt.Errorf("database name is required")
+	if err := validate.Struct(c); err != nil {
+		// Return validation error with field details
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			// Format first validation error for better user experience
+			firstErr := validationErrors[0]
+			return fmt.Errorf("validation failed for field '%s': %s (value: '%v')",
+				firstErr.Field(),
+				firstErr.Tag(),
+				firstErr.Value())
 		}
+		return err
+	}
+
+	// Custom validation: Database is required for non-SQLite drivers unless DSN is provided
+	if c.DSN == "" && c.Driver != DriverSQLite && c.Database == "" {
+		return fmt.Errorf("database name is required for driver '%s'", c.Driver)
 	}
 
 	return nil
@@ -275,11 +181,20 @@ func (c *Config) Validate() error {
 
 // Open opens a database connection with the configured settings.
 func (c *Config) Open() (*gorm.DB, error) {
-	// Configure GORM
+	// Configure GORM - dereference boolean pointers with defaults
+	skipTx := false
+	if c.SkipDefaultTransaction != nil {
+		skipTx = *c.SkipDefaultTransaction
+	}
+	prepare := true
+	if c.PrepareStmt != nil {
+		prepare = *c.PrepareStmt
+	}
+
 	gormConfig := &gorm.Config{
 		Logger:                 c.getLogger(),
-		SkipDefaultTransaction: c.SkipDefaultTransaction,
-		PrepareStmt:            c.PrepareStmt,
+		SkipDefaultTransaction: skipTx,
+		PrepareStmt:            prepare,
 	}
 
 	// Open connection based on driver

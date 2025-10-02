@@ -186,14 +186,15 @@ func (m *mockConfig) Unmarshal(key string, v any) error {
 		if logLevel, ok := dbData["log_level"].(string); ok {
 			cfg.LogLevel = logLevel
 		}
+		// Boolean fields - store as pointers to distinguish unset from false
 		if skipDefaultTransaction, ok := dbData["skip_default_transaction"].(bool); ok {
-			cfg.SkipDefaultTransaction = skipDefaultTransaction
+			cfg.SkipDefaultTransaction = &skipDefaultTransaction
 		}
 		if prepareStmt, ok := dbData["prepare_stmt"].(bool); ok {
-			cfg.PrepareStmt = prepareStmt
+			cfg.PrepareStmt = &prepareStmt
 		}
 		if autoMigrate, ok := dbData["auto_migrate"].(bool); ok {
-			cfg.AutoMigrate = autoMigrate
+			cfg.AutoMigrate = &autoMigrate
 		}
 	}
 	return nil

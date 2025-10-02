@@ -7,6 +7,12 @@ import (
 	"github.com/mapoio/hyperion"
 )
 
+// boolPtr returns a pointer to a boolean value.
+// Helper function for tests to easily create boolean pointers.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 func TestConfig_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -166,8 +172,8 @@ func TestConfig_Open(t *testing.T) {
 		ConnMaxIdleTime:        10 * time.Minute,
 		LogLevel:               "silent",
 		SlowThreshold:          200 * time.Millisecond,
-		SkipDefaultTransaction: true,
-		PrepareStmt:            true,
+		SkipDefaultTransaction: boolPtr(true),
+		PrepareStmt:            boolPtr(true),
 	}
 
 	db, err := cfg.Open()
@@ -208,8 +214,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("DefaultConfig().LogLevel = %s, want warn", cfg.LogLevel)
 	}
 
-	if cfg.PrepareStmt != true {
-		t.Error("DefaultConfig().PrepareStmt = false, want true")
+	if cfg.PrepareStmt == nil || !*cfg.PrepareStmt {
+		t.Error("DefaultConfig().PrepareStmt should be true")
 	}
 }
 
@@ -461,7 +467,7 @@ func TestLoadConfig_PreservesDefaults(t *testing.T) {
 		t.Errorf("LogLevel = %s, want warn", dbConfig.LogLevel)
 	}
 
-	if dbConfig.PrepareStmt != true {
+	if dbConfig.PrepareStmt == nil || !*dbConfig.PrepareStmt {
 		t.Errorf("PrepareStmt = %v, want true", dbConfig.PrepareStmt)
 	}
 
@@ -681,7 +687,7 @@ func TestLoadConfig_RootOverridesPrefixed(t *testing.T) {
 		t.Errorf("LogLevel = %s, want error (from prefixed)", dbConfig.LogLevel)
 	}
 
-	if dbConfig.SkipDefaultTransaction != true {
+	if dbConfig.SkipDefaultTransaction == nil || !*dbConfig.SkipDefaultTransaction {
 		t.Errorf("SkipDefaultTransaction = %v, want true (from prefixed)", dbConfig.SkipDefaultTransaction)
 	}
 }
@@ -703,7 +709,7 @@ func TestLoadConfig_BooleanFalseValues(t *testing.T) {
 
 	dbConfig := DefaultConfig()
 	// Verify defaults before loading
-	if !dbConfig.PrepareStmt {
+	if dbConfig.PrepareStmt == nil || !*dbConfig.PrepareStmt {
 		t.Fatal("Default PrepareStmt should be true")
 	}
 
@@ -713,15 +719,15 @@ func TestLoadConfig_BooleanFalseValues(t *testing.T) {
 	}
 
 	// Verify that explicit false values override defaults
-	if dbConfig.PrepareStmt != false {
+	if dbConfig.PrepareStmt == nil || *dbConfig.PrepareStmt {
 		t.Errorf("PrepareStmt = %v, want false (explicitly set)", dbConfig.PrepareStmt)
 	}
 
-	if dbConfig.SkipDefaultTransaction != false {
+	if dbConfig.SkipDefaultTransaction == nil || *dbConfig.SkipDefaultTransaction {
 		t.Errorf("SkipDefaultTransaction = %v, want false (explicitly set)", dbConfig.SkipDefaultTransaction)
 	}
 
-	if dbConfig.AutoMigrate != false {
+	if dbConfig.AutoMigrate == nil || *dbConfig.AutoMigrate {
 		t.Errorf("AutoMigrate = %v, want false (explicitly set)", dbConfig.AutoMigrate)
 	}
 }
@@ -742,7 +748,7 @@ func TestLoadConfig_BooleanRootLevelFalse(t *testing.T) {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
 
-	if dbConfig.PrepareStmt != false {
+	if dbConfig.PrepareStmt == nil || *dbConfig.PrepareStmt {
 		t.Errorf("PrepareStmt = %v, want false (root level explicit)", dbConfig.PrepareStmt)
 	}
 }
