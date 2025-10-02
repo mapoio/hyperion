@@ -1,77 +1,54 @@
 # Label configuration for auto-labeling PRs based on file changes
 
-# Core components
-'component: hyperconfig':
+# Core library
+'component: core':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hyperconfig/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hyperconfig*'
+    - any-glob-to-any-file: 'hyperion/**/*'
 
-'component: hyperlog':
+# Adapters
+'component: adapter-viper':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hyperlog/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hyperlog*'
+    - any-glob-to-any-file: 'adapter/viper/**/*'
 
-'component: hyperctx':
+'component: adapter-zap':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hyperctx/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hyperctx*'
+    - any-glob-to-any-file: 'adapter/zap/**/*'
 
-'component: hyperdb':
+'component: adapter-gorm':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hyperdb/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hyperdb*'
+    - any-glob-to-any-file: 'adapter/gorm/**/*'
 
-'component: hypercache':
+'component: adapter-otel':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hypercache/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hypercache*'
+    - any-glob-to-any-file: 'adapter/otel/**/*'
 
-'component: hyperweb':
+'component: adapter-gin':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hyperweb/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hyperweb*'
+    - any-glob-to-any-file: 'adapter/gin/**/*'
 
-'component: hypergrpc':
+'component: adapter-grpc':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hypergrpc/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hypergrpc*'
+    - any-glob-to-any-file: 'adapter/grpc/**/*'
 
-'component: hyperhttp':
+'component: adapter-ristretto':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hyperhttp/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hyperhttp*'
+    - any-glob-to-any-file: 'adapter/ristretto/**/*'
 
-'component: hyperstore':
+'component: adapter-redis':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hyperstore/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hyperstore*'
+    - any-glob-to-any-file: 'adapter/redis/**/*'
 
-'component: hypercrypto':
+'component: adapter-s3':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hypercrypto/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hypercrypto*'
+    - any-glob-to-any-file: 'adapter/s3/**/*'
 
-'component: hypererror':
+'component: adapter-aes':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hypererror/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hypererror*'
+    - any-glob-to-any-file: 'adapter/aes/**/*'
 
-'component: hypervalidator':
+'component: adapter-validator':
   - changed-files:
-    - any-glob-to-any-file: 'pkg/hypervalidator/**/*'
-  - changed-files:
-    - any-glob-to-any-file: 'docs/stories/*hypervalidator*'
+    - any-glob-to-any-file: 'adapter/validator/**/*'
 
 # Change types
 'type: documentation':
@@ -93,6 +70,12 @@
     - any-glob-to-any-file: 'Makefile'
 
 'type: dependencies':
+  - changed-files:
+    - any-glob-to-any-file: 'go.mod'
+  - changed-files:
+    - any-glob-to-any-file: 'go.sum'
+
+'type: deps':
   - changed-files:
     - any-glob-to-any-file: 'go.mod'
   - changed-files:
