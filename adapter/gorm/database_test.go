@@ -63,8 +63,56 @@ func (m *mockConfig) GetStringSlice(key string) []string {
 }
 
 func (m *mockConfig) IsSet(key string) bool {
-	_, ok := m.data[key]
-	return ok
+	// Check root level first
+	if _, ok := m.data[key]; ok {
+		return true
+	}
+
+	// Check nested keys (e.g., "database.prepare_stmt")
+	// Split key by "." and navigate nested maps
+	parts := splitKey(key)
+	if len(parts) == 0 {
+		return false
+	}
+
+	current := m.data
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			// Last part - check if key exists
+			_, ok := current[part]
+			return ok
+		}
+
+		// Navigate to nested map
+		next, ok := current[part].(map[string]any)
+		if !ok {
+			return false
+		}
+		current = next
+	}
+
+	return false
+}
+
+// splitKey splits a key like "database.prepare_stmt" into ["database", "prepare_stmt"]
+func splitKey(key string) []string {
+	if key == "" {
+		return nil
+	}
+	result := make([]string, 0, 2)
+	start := 0
+	for i := 0; i < len(key); i++ {
+		if key[i] == '.' {
+			if i > start {
+				result = append(result, key[start:i])
+			}
+			start = i + 1
+		}
+	}
+	if start < len(key) {
+		result = append(result, key[start:])
+	}
+	return result
 }
 
 func (m *mockConfig) AllKeys() []string {

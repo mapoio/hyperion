@@ -173,15 +173,15 @@ func loadConfig(src hyperion.Config, dst *Config) error {
 		dst.LogLevel = temp.LogLevel
 	}
 
-	// Boolean fields - only override if explicitly set to true
-	// (since false is the zero value, we can't distinguish between unset and false)
-	if temp.SkipDefaultTransaction {
+	// Boolean fields - check if key is explicitly set (to handle false values)
+	// We use IsSet to distinguish between "not provided" and "explicitly set to false"
+	if src.IsSet("database.skip_default_transaction") || src.IsSet("skip_default_transaction") {
 		dst.SkipDefaultTransaction = temp.SkipDefaultTransaction
 	}
-	if temp.PrepareStmt {
+	if src.IsSet("database.prepare_stmt") || src.IsSet("prepare_stmt") {
 		dst.PrepareStmt = temp.PrepareStmt
 	}
-	if temp.AutoMigrate {
+	if src.IsSet("database.auto_migrate") || src.IsSet("auto_migrate") {
 		dst.AutoMigrate = temp.AutoMigrate
 	}
 

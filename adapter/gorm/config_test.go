@@ -685,3 +685,64 @@ func TestLoadConfig_RootOverridesPrefixed(t *testing.T) {
 		t.Errorf("SkipDefaultTransaction = %v, want true (from prefixed)", dbConfig.SkipDefaultTransaction)
 	}
 }
+
+func TestLoadConfig_BooleanFalseValues(t *testing.T) {
+	// Test that boolean fields can be explicitly set to false
+	// This addresses Codex P1 issue: Boolean overrides ignore explicit false values
+	cfg := &mockConfig{
+		data: map[string]any{
+			"database": map[string]any{
+				"driver":                   DriverSQLite,
+				"database":                 ":memory:",
+				"prepare_stmt":             false, // Explicitly set to false (default is true)
+				"skip_default_transaction": false, // Explicitly set to false
+				"auto_migrate":             false, // Explicitly set to false
+			},
+		},
+	}
+
+	dbConfig := DefaultConfig()
+	// Verify defaults before loading
+	if !dbConfig.PrepareStmt {
+		t.Fatal("Default PrepareStmt should be true")
+	}
+
+	err := loadConfig(cfg, dbConfig)
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	// Verify that explicit false values override defaults
+	if dbConfig.PrepareStmt != false {
+		t.Errorf("PrepareStmt = %v, want false (explicitly set)", dbConfig.PrepareStmt)
+	}
+
+	if dbConfig.SkipDefaultTransaction != false {
+		t.Errorf("SkipDefaultTransaction = %v, want false (explicitly set)", dbConfig.SkipDefaultTransaction)
+	}
+
+	if dbConfig.AutoMigrate != false {
+		t.Errorf("AutoMigrate = %v, want false (explicitly set)", dbConfig.AutoMigrate)
+	}
+}
+
+func TestLoadConfig_BooleanRootLevelFalse(t *testing.T) {
+	// Test that root-level boolean fields can be set to false
+	cfg := &mockConfig{
+		data: map[string]any{
+			"driver":      DriverSQLite,
+			"database":    ":memory:",
+			"prepare_stmt": false, // Root level explicit false
+		},
+	}
+
+	dbConfig := DefaultConfig()
+	err := loadConfig(cfg, dbConfig)
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	if dbConfig.PrepareStmt != false {
+		t.Errorf("PrepareStmt = %v, want false (root level explicit)", dbConfig.PrepareStmt)
+	}
+}
