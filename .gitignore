@@ -17,6 +17,11 @@ coverage.*
 *.coverprofile
 profile.cov
 
+# Test databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
