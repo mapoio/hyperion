@@ -3,7 +3,7 @@ module github.com/mapoio/hyperion/adapter/viper
 go 1.24
 
 require (
-	github.com/fsnotify/fsnotify v1.7.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/mapoio/hyperion v0.0.0
 	github.com/spf13/viper v1.19.0
 	go.uber.org/fx v1.22.2
