@@ -192,38 +192,36 @@ func (l *zapLogger) Sync() error {
 	return l.core.Sync()
 }
 
+// levelMapping defines bidirectional mapping between hyperion and zap log levels.
+var levelMapping = map[hyperion.LogLevel]zapcore.Level{
+	hyperion.DebugLevel: zapcore.DebugLevel,
+	hyperion.InfoLevel:  zapcore.InfoLevel,
+	hyperion.WarnLevel:  zapcore.WarnLevel,
+	hyperion.ErrorLevel: zapcore.ErrorLevel,
+	hyperion.FatalLevel: zapcore.FatalLevel,
+}
+
+// reverseLevelMapping provides reverse lookup from zap to hyperion levels.
+var reverseLevelMapping = map[zapcore.Level]hyperion.LogLevel{
+	zapcore.DebugLevel: hyperion.DebugLevel,
+	zapcore.InfoLevel:  hyperion.InfoLevel,
+	zapcore.WarnLevel:  hyperion.WarnLevel,
+	zapcore.ErrorLevel: hyperion.ErrorLevel,
+	zapcore.FatalLevel: hyperion.FatalLevel,
+}
+
 // toZapLevel converts hyperion.LogLevel to zapcore.Level.
 func toZapLevel(level hyperion.LogLevel) zapcore.Level {
-	switch level {
-	case hyperion.DebugLevel:
-		return zapcore.DebugLevel
-	case hyperion.InfoLevel:
-		return zapcore.InfoLevel
-	case hyperion.WarnLevel:
-		return zapcore.WarnLevel
-	case hyperion.ErrorLevel:
-		return zapcore.ErrorLevel
-	case hyperion.FatalLevel:
-		return zapcore.FatalLevel
-	default:
-		return zapcore.InfoLevel
+	if zapLevel, ok := levelMapping[level]; ok {
+		return zapLevel
 	}
+	return zapcore.InfoLevel // default
 }
 
 // fromZapLevel converts zapcore.Level to hyperion.LogLevel.
 func fromZapLevel(level zapcore.Level) hyperion.LogLevel {
-	switch level {
-	case zapcore.DebugLevel:
-		return hyperion.DebugLevel
-	case zapcore.InfoLevel:
-		return hyperion.InfoLevel
-	case zapcore.WarnLevel:
-		return hyperion.WarnLevel
-	case zapcore.ErrorLevel:
-		return hyperion.ErrorLevel
-	case zapcore.FatalLevel:
-		return hyperion.FatalLevel
-	default:
-		return hyperion.InfoLevel
+	if hyperionLevel, ok := reverseLevelMapping[level]; ok {
+		return hyperionLevel
 	}
+	return hyperion.InfoLevel // default
 }
