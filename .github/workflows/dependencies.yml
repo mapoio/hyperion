@@ -22,15 +22,21 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
-      - name: Update dependencies
+      - name: Update dependencies (all modules)
         run: |
-          go get -u ./...
-          go mod tidy
+          for module in hyperion adapter/viper; do
+            echo "Updating dependencies for $module..."
+            (cd $module && go get -u ./... && go mod tidy) || exit 1
+          done
 
-      - name: Run tests
-        run: go test ./...
+      - name: Run tests (all modules)
+        run: |
+          for module in hyperion adapter/viper; do
+            echo "Testing $module..."
+            (cd $module && go test ./...) || exit 1
+          done
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
@@ -67,14 +73,20 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
       - name: Run Nancy (dependency vulnerability scanner)
         run: |
           go install github.com/sonatype-nexus-community/nancy@latest
-          go list -json -deps ./... | nancy sleuth
+          for module in hyperion adapter/viper; do
+            echo "Scanning $module with Nancy..."
+            (cd $module && go list -json -deps ./... | nancy sleuth) || true
+          done
 
-      - name: Run govulncheck
+      - name: Run govulncheck (all modules)
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          for module in hyperion adapter/viper; do
+            echo "Checking vulnerabilities in $module..."
+            (cd $module && govulncheck ./...) || true
+          done

@@ -34,19 +34,18 @@ jobs:
             chore
             revert
           scopes: |
-            hyperconfig
-            hyperlog
-            hyperdb
-            hypercache
-            hyperctx
-            hyperweb
-            hypergrpc
-            hyperhttp
-            hyperstore
-            hypercrypto
-            hypererror
-            hypervalidator
             hyperion
+            adapter
+            viper
+            zap
+            gorm
+            otel
+            ristretto
+            redis
+            gin
+            grpc
+            docs
+            ci
           requireScope: false
 
   # Check for large files
@@ -132,13 +131,34 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (monorepo)
         run: |
-          go test -v -coverprofile=coverage-pr.out -covermode=atomic ./...
-          pr_coverage=$(go tool cover -func=coverage-pr.out | grep total | awk '{print $3}' | sed 's/%//')
-          echo "PR Coverage: $pr_coverage%"
+          # Run tests for all modules and aggregate coverage
+          total_coverage=0
+          module_count=0
+          for module in hyperion adapter/viper; do
+            if [ -d "$module" ]; then
+              echo "Testing $module..."
+              (cd $module && go test -v -coverprofile=coverage.out -covermode=atomic ./...)
+              if [ -f "$module/coverage.out" ]; then
+                coverage=$(cd $module && go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+                echo "$module coverage: $coverage%"
+                total_coverage=$(echo "$total_coverage + $coverage" | bc)
+                module_count=$((module_count + 1))
+              fi
+            fi
+          done
+
+          # Calculate average coverage
+          if [ $module_count -gt 0 ]; then
+            pr_coverage=$(echo "scale=2; $total_coverage / $module_count" | bc)
+          else
+            pr_coverage=0
+          fi
+
+          echo "Average PR Coverage: $pr_coverage%"
           echo "pr_coverage=$pr_coverage" >> $GITHUB_ENV
 
       - name: Comment coverage on PR

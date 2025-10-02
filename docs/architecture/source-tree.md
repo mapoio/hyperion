@@ -1,135 +1,95 @@
 # Hyperion Framework Source Tree Guide
 
+**Version**: 2.0
+**Date**: October 2025
+**Status**: Updated for Monorepo Architecture
+
 This document explains the organization of the Hyperion framework source code and provides guidelines for navigating the codebase.
 
 ---
 
-## Framework Source Structure
+## Framework Source Structure (v2.0 Monorepo)
 
 ```
-hyperion/
-├── pkg/                           # Framework core packages
-│   ├── hyperion/                  # Framework entry point and module aggregation
-│   │   ├── hyperion.go           # Core(), Web(), GRPC(), FullStack() constructors
-│   │   └── module.go             # fx.Module aggregation
-│   │
-│   ├── hyperctx/                  # Context abstraction (CORE)
-│   │   ├── context.go            # Context interface definition
-│   │   ├── implementation.go     # Default implementation
-│   │   ├── user.go               # User interface and default implementation
-│   │   └── module.go             # fx.Module provider
-│   │
-│   ├── hyperconfig/               # Configuration management
-│   │   ├── config.go             # Config interface
-│   │   ├── viper.go              # Viper-based implementation
-│   │   ├── watcher.go            # Hot reload support
-│   │   └── module.go
-│   │
-│   ├── hyperlog/                  # Structured logging
-│   │   ├── logger.go             # Logger interface
-│   │   ├── zap.go                # Zap implementation
-│   │   ├── level.go              # Dynamic level adjustment
-│   │   └── module.go
-│   │
-│   ├── hyperdb/                   # Database + UnitOfWork
-│   │   ├── db.go                 # Database interface
-│   │   ├── gorm.go               # GORM implementation
-│   │   ├── uow.go                # UnitOfWork interface
-│   │   ├── transaction.go        # Transaction implementation
-│   │   ├── trace_plugin.go       # GORM tracing plugin
-│   │   └── module.go
-│   │
-│   ├── hypercache/                # Cache abstraction
-│   │   ├── cache.go              # Cache interface
-│   │   ├── ristretto.go          # In-memory cache (Ristretto)
-│   │   ├── redis.go              # Distributed cache (Redis)
-│   │   └── module.go
-│   │
-│   ├── hyperstore/                # Object storage
-│   │   ├── store.go              # Store interface
-│   │   ├── s3.go                 # S3 implementation
-│   │   └── module.go
-│   │
-│   ├── hypercrypto/               # Encryption utilities
-│   │   ├── crypter.go            # Crypter interface
-│   │   ├── aes.go                # AES-256-GCM implementation
-│   │   └── module.go
-│   │
-│   ├── hypererror/                # Error handling
-│   │   ├── error.go              # Error interface and Code type
-│   │   ├── codes.go              # Predefined error codes
-│   │   ├── constructors.go       # Convenient error constructors
-│   │   └── conversion.go         # HTTP/gRPC status conversion
-│   │
-│   ├── hypervalidator/            # Request validation
-│   │   ├── validator.go          # Validator interface
-│   │   ├── playground.go         # go-playground/validator implementation
-│   │   └── module.go
-│   │
-│   ├── hyperhttp/                 # HTTP client
-│   │   ├── client.go             # Client interface
-│   │   ├── resty.go              # Resty-based implementation
-│   │   ├── trace.go              # OpenTelemetry tracing middleware
-│   │   └── module.go
-│   │
-│   ├── hyperweb/                  # Web server (Gin)
-│   │   ├── server.go             # Server interface
-│   │   ├── gin.go                # Gin implementation
-│   │   ├── middleware/           # Built-in middleware
-│   │   │   ├── trace.go          # Tracing middleware
-│   │   │   ├── recovery.go       # Panic recovery
-│   │   │   ├── request_log.go    # Request logging
-│   │   │   └── error_handler.go  # Error response conversion
-│   │   └── module.go
-│   │
-│   └── hypergrpc/                 # gRPC server
-│       ├── server.go             # Server interface
-│       ├── grpc.go               # gRPC implementation
-│       ├── interceptor/          # Built-in interceptors
-│       │   ├── trace.go          # Tracing interceptor
-│       │   ├── recovery.go       # Panic recovery
-│       │   ├── request_log.go    # Request logging
-│       │   └── error_handler.go  # Error status conversion
-│       └── module.go
+hyperion/                          # Monorepo root
+├── go.work                        # Go workspace definition
+├── Makefile                       # Unified build system
+├── .golangci.yml                  # Linter configuration
 │
-├── examples/                      # Example applications
-│   ├── simple-api/               # Minimal REST API example
-│   │   ├── cmd/server/main.go
-│   │   ├── internal/
-│   │   │   ├── handler/
-│   │   │   ├── service/
-│   │   │   └── repository/
-│   │   └── configs/config.yaml
+├── hyperion/                      # 🎯 Core Library (ZERO 3rd-party deps)
+│   ├── go.mod                     # Dependencies: go.uber.org/fx ONLY
+│   ├── go.sum
 │   │
-│   └── fullstack/                # Complete example (Web + gRPC + DB)
-│       ├── cmd/server/main.go
-│       ├── internal/
-│       │   ├── domain/           # Domain models
-│       │   ├── handler/          # HTTP handlers
-│       │   ├── grpc/             # gRPC services
-│       │   ├── service/          # Business logic
-│       │   └── repository/       # Data access
-│       ├── api/
-│       │   ├── proto/            # Protobuf definitions
-│       │   └── openapi/          # OpenAPI specs
-│       └── configs/config.yaml
+│   ├── logger.go                  # Logger interface
+│   ├── logger_noop.go             # NoOp Logger implementation
+│   │
+│   ├── tracer.go                  # Tracer interface (OTel-compatible)
+│   ├── tracer_noop.go             # NoOp Tracer implementation
+│   │
+│   ├── database.go                # Database + Executor interfaces
+│   ├── database_noop.go           # NoOp Database implementation
+│   │
+│   ├── config.go                  # Config + ConfigWatcher interfaces
+│   ├── config_noop.go             # NoOp Config implementation
+│   │
+│   ├── cache.go                   # Cache interface
+│   ├── cache_noop.go              # NoOp Cache implementation
+│   │
+│   ├── context.go                 # Context interface (type-safe)
+│   ├── defaults.go                # Default modules (NoOp providers)
+│   ├── module.go                  # CoreModule definitions
+│   └── hyperion_test.go           # Core tests
 │
-├── docs/                         # Documentation
-│   ├── architecture.md           # Main architecture document
-│   ├── architecture/             # Detailed architecture docs
-│   │   ├── coding-standards.md
-│   │   ├── tech-stack.md
-│   │   └── source-tree.md       # This file
-│   ├── quick-start.md            # Getting started guide
-│   ├── architecture-decisions.md # ADRs
-│   └── implementation-plan.md    # Development roadmap
-│
-├── .golangci.yml                 # Linter configuration
-├── Makefile                      # Build and development tasks
-├── go.mod
-├── go.sum
-└── README.md                     # Project overview
+└── adapter/                       # 🔌 Adapter Implementations
+    │
+    ├── viper/                     # ✅ Config Adapter (Implemented)
+    │   ├── go.mod                 # Independent module
+    │   ├── go.sum
+    │   ├── provider.go            # ConfigWatcher implementation
+    │   ├── module.go              # fx.Module export
+    │   └── provider_test.go       # Unit tests
+    │
+    ├── zap/                       # 🔜 Logger Adapter (Planned)
+    │   ├── go.mod
+    │   ├── logger.go              # Zap-based Logger
+    │   ├── module.go
+    │   └── logger_test.go
+    │
+    ├── otel/                      # 🔜 Tracer Adapter (Planned)
+    │   ├── go.mod
+    │   ├── tracer.go              # OpenTelemetry integration
+    │   ├── module.go
+    │   └── tracer_test.go
+    │
+    ├── gorm/                      # 🔜 Database Adapter (Planned)
+    │   ├── go.mod
+    │   ├── database.go            # GORM integration
+    │   ├── unit_of_work.go        # Transaction management
+    │   ├── module.go
+    │   └── database_test.go
+    │
+    ├── ristretto/                 # 🔜 In-Memory Cache (Planned)
+    │   ├── go.mod
+    │   ├── cache.go
+    │   └── module.go
+    │
+    └── redis/                     # 🔜 Distributed Cache (Planned)
+        ├── go.mod
+        ├── cache.go
+        └── module.go
 ```
+
+---
+
+## Key Architectural Changes (v1.0 → v2.0)
+
+| Aspect | v1.0 | v2.0 |
+|--------|------|------|
+| **Structure** | Single module `pkg/hyper*` | Monorepo with `hyperion/` + `adapter/*` |
+| **Dependencies** | Bundled implementations | Core: zero deps, Adapters: specific deps |
+| **Modules** | One `go.mod` | Multiple independent `go.mod` files |
+| **Versioning** | Monolithic | Independent per module |
+| **NoOp Location** | Separate package | Same package as interface |
 
 ---
 
@@ -168,7 +128,7 @@ your-app/
 │   │
 │   └── repository/               # Infrastructure layer
 │       ├── user_repository.go   # Data access implementation
-│       ├── models.go            # Database models (GORM)
+│       ├── models.go            # Database models
 │       └── module.go            # fx.Module for repositories
 │
 ├── api/                          # API definitions
@@ -198,25 +158,31 @@ your-app/
 
 ## Package Naming Conventions
 
-### Framework Packages (pkg/hyper*)
+### Framework Core (hyperion/)
 
-All framework core packages follow the `hyper*` naming convention:
+All core interfaces use simple, descriptive names:
 
-| Package | Purpose | Naming Rationale |
-|---------|---------|------------------|
-| `hyperion` | Framework entry | Greek mythology reference |
-| `hyperctx` | Context abstraction | **hyper** + **ctx**(context) |
-| `hyperconfig` | Configuration | **hyper** + **config** |
-| `hyperlog` | Logging | **hyper** + **log** |
-| `hyperdb` | Database | **hyper** + **db** |
-| `hypercache` | Cache | **hyper** + **cache** |
-| `hyperstore` | Object storage | **hyper** + **store** |
-| `hypercrypto` | Encryption | **hyper** + **crypto** |
-| `hypererror` | Error handling | **hyper** + **error** |
-| `hypervalidator` | Validation | **hyper** + **validator** |
-| `hyperhttp` | HTTP client | **hyper** + **http** |
-| `hyperweb` | Web server | **hyper** + **web** |
-| `hypergrpc` | gRPC server | **hyper** + **grpc** |
+| File | Purpose | Naming Rationale |
+|------|---------|------------------|
+| `logger.go` | Logger interface | Core capability |
+| `tracer.go` | Tracer interface | Distributed tracing |
+| `database.go` | Database interface | Data access |
+| `config.go` | Configuration interface | Config management |
+| `cache.go` | Cache interface | Caching layer |
+| `context.go` | Context interface | Type-safe context |
+
+### Adapter Packages (adapter/*)
+
+Adapters are named after the underlying library:
+
+| Adapter | Implements | Library Used |
+|---------|------------|--------------|
+| `viper` | Config/ConfigWatcher | github.com/spf13/viper |
+| `zap` | Logger | go.uber.org/zap |
+| `otel` | Tracer | go.opentelemetry.io/otel |
+| `gorm` | Database | gorm.io/gorm |
+| `ristretto` | Cache | github.com/dgraph-io/ristretto |
+| `redis` | Cache | github.com/redis/go-redis |
 
 ### Application Packages (internal/*)
 
@@ -231,18 +197,58 @@ Application packages use descriptive, domain-specific names without prefixes:
 
 ## Module Organization
 
-Each package exports an `fx.Module` for dependency injection:
+### Core Module Structure
+
+The core library exports fx modules for dependency injection:
 
 ```go
-// pkg/hyperlog/module.go
-package hyperlog
+// hyperion/module.go
+package hyperion
 
 import "go.uber.org/fx"
 
-var Module = fx.Module("hyperlog",
-    fx.Provide(NewZapLogger),
+// CoreModule - Provides all interfaces with NoOp defaults
+var CoreModule = fx.Module("hyperion.core",
+    fx.Options(
+        DefaultLoggerModule,
+        DefaultTracerModule,
+        DefaultDatabaseModule,
+        DefaultConfigModule,
+        DefaultCacheModule,
+    ),
+)
+
+// CoreWithoutDefaultsModule - Strict mode, requires all adapters
+var CoreWithoutDefaultsModule = fx.Module("hyperion.core.minimal",
+    // No default implementations
 )
 ```
+
+### Adapter Module Pattern
+
+Each adapter exports a module that provides interface implementation:
+
+```go
+// adapter/viper/module.go
+package viper
+
+import (
+    "go.uber.org/fx"
+    "github.com/mapoio/hyperion"
+)
+
+var Module = fx.Module("hyperion.adapter.viper",
+    fx.Provide(
+        fx.Annotate(
+            NewProviderFromEnv,
+            fx.As(new(hyperion.Config)),
+            fx.As(new(hyperion.ConfigWatcher)),
+        ),
+    ),
+)
+```
+
+### Application Module Pattern
 
 Application modules follow the same pattern:
 
@@ -265,12 +271,36 @@ var Module = fx.Module("service",
 
 ## File Naming Conventions
 
-### Framework Packages
+### Framework Core
 
-- `{component}.go`: Core interface definition (e.g., `logger.go`, `cache.go`)
-- `{impl}.go`: Implementation (e.g., `zap.go`, `ristretto.go`)
+- `{interface}.go`: Core interface definition (e.g., `logger.go`, `cache.go`)
+- `{interface}_noop.go`: NoOp implementation (e.g., `logger_noop.go`)
 - `module.go`: fx.Module provider
-- `{feature}.go`: Specific feature implementation (e.g., `trace_plugin.go`)
+- `defaults.go`: Default module definitions
+- `{interface}_test.go`: Unit tests
+
+**Example**:
+```
+hyperion/
+├── logger.go          # Logger interface
+├── logger_noop.go     # NoOp implementation
+├── logger_test.go     # Tests
+```
+
+### Adapter Packages
+
+- `{impl}.go`: Implementation file (e.g., `provider.go` for Viper, `logger.go` for Zap)
+- `module.go`: fx.Module export
+- `{impl}_test.go`: Unit tests
+- `integration_test.go`: Integration tests (if applicable)
+
+**Example**:
+```
+adapter/viper/
+├── provider.go        # Viper implementation
+├── module.go          # fx.Module
+├── provider_test.go   # Unit tests
+```
 
 ### Application Packages
 
@@ -286,21 +316,28 @@ var Module = fx.Module("service",
 
 - `{name}_test.go`: Unit tests
 - `{name}_integration_test.go`: Integration tests
-- `mock_{name}.go`: Mock implementations
+- `mock_{name}.go`: Mock implementations (or use mockery)
 
 ---
 
 ## Import Path Structure
 
-### Framework Imports
+### Framework Imports (v2.0)
 
 ```go
 import (
-    "github.com/mapoio/hyperion/pkg/hyperctx"
-    "github.com/mapoio/hyperion/pkg/hyperlog"
-    "github.com/mapoio/hyperion/pkg/hyperdb"
+    // Core library (interfaces)
+    "github.com/mapoio/hyperion"
+
+    // Adapters (implementations)
+    "github.com/mapoio/hyperion/adapter/viper"
+    "github.com/mapoio/hyperion/adapter/zap"
+    "github.com/mapoio/hyperion/adapter/otel"
+    "github.com/mapoio/hyperion/adapter/gorm"
 )
 ```
+
+**Note**: In v2.0, there is NO `pkg/` prefix. Import directly from `github.com/mapoio/hyperion`.
 
 ### Application Imports
 
@@ -317,9 +354,9 @@ import (
     "go.uber.org/fx"
     "go.uber.org/zap"
 
-    // Local (framework + application)
-    "github.com/mapoio/hyperion/pkg/hyperctx"
-    "github.com/mapoio/hyperion/pkg/hyperlog"
+    // Framework + Application
+    "github.com/mapoio/hyperion"
+    "github.com/mapoio/hyperion/adapter/viper"
     "github.com/your-app/internal/domain/user"
     "github.com/your-app/internal/service"
 )
@@ -331,57 +368,85 @@ import (
 
 ### Finding Component Implementations
 
-1. **Interface Definition**: Always in `{component}.go`
-   - Example: `pkg/hyperlog/logger.go` contains `Logger` interface
+1. **Interface Definition**: Always in `hyperion/{component}.go`
+   - Example: `hyperion/logger.go` contains `Logger` interface
 
-2. **Default Implementation**: Named after the underlying library
-   - Example: `pkg/hyperlog/zap.go` contains Zap-based implementation
+2. **NoOp Implementation**: In `hyperion/{component}_noop.go`
+   - Example: `hyperion/logger_noop.go` contains NoOp Logger
 
-3. **Module Registration**: Always in `module.go`
-   - Example: `pkg/hyperlog/module.go` exports `Module` variable
+3. **Adapter Implementation**: In `adapter/{name}/`
+   - Example: `adapter/viper/provider.go` contains Viper-based Config
+
+4. **Module Registration**: Always in `module.go`
+   - Core: `hyperion/module.go` exports `CoreModule`
+   - Adapters: `adapter/{name}/module.go` exports `Module`
 
 ### Finding Usage Examples
 
-1. **Simple Examples**: `examples/simple-api/`
+**Note**: Examples are planned but not yet implemented. Current reference:
+
+1. **Core Tests**: `hyperion/hyperion_test.go`
+   - Shows how to use CoreModule
+   - Demonstrates NoOp implementations
+
+2. **Adapter Tests**: `adapter/viper/provider_test.go`
+   - Shows how to use Viper adapter
+   - Demonstrates configuration loading
+
+**Planned Examples**:
+1. **Simple Examples**: `examples/simple-api/` (planned)
    - Minimal setup with basic CRUD operations
 
-2. **Complete Examples**: `examples/fullstack/`
+2. **Complete Examples**: `examples/fullstack/` (planned)
    - Production-like structure with all layers
    - Includes domain modeling, validation, error handling
 
 ### Finding Documentation
 
-1. **Package Documentation**: Each package has a `doc.go` file
-   - Example: `pkg/hyperlog/doc.go` explains logging capabilities
+1. **Main Architecture**: `docs/architecture.md`
+   - Complete v2.0 architecture documentation (2531 lines)
+   - Source of truth for all architectural decisions
 
-2. **Architecture Docs**: `docs/architecture/` directory
+2. **Architecture Decisions**: `docs/architecture-decisions.md`
+   - ADRs explaining key design choices
+   - Rationale for v2.0 changes
+
+3. **Implementation Review**: `docs/architecture-review-v2.md`
+   - Detailed review of v2.0 implementation
+   - Technical implementation notes
+
+4. **Additional Docs**: `docs/architecture/` directory
    - `coding-standards.md`: Development guidelines
    - `tech-stack.md`: Technology choices and rationale
    - `source-tree.md`: This file
 
 ---
 
-## Code Generation Locations
+## Workspace Management
 
-### Protobuf Generated Code
+### Go Workspace Commands
 
-```
-api/proto/{domain}/{version}/{file}.pb.go        # Message definitions
-api/proto/{domain}/{version}/{file}_grpc.pb.go   # gRPC service stubs
+```bash
+# Sync workspace (after adding new modules)
+go work sync
+
+# Build all modules
+go build ./...
+
+# Test all modules
+go test ./...
+
+# Update workspace to include new module
+go work use ./adapter/newadapter
 ```
 
-### Mock Generated Code
+### Adding a New Adapter
 
-```
-internal/{layer}/mock_{interface}.go             # Mockery-generated mocks
-```
-
-### Migration Files
-
-```
-migrations/{timestamp}_{description}.sql         # SQL migrations
-migrations/{timestamp}_{description}.go          # Go migrations (GORM)
-```
+1. Create adapter directory: `mkdir -p adapter/newadapter`
+2. Initialize module: `cd adapter/newadapter && go mod init github.com/mapoio/hyperion/adapter/newadapter`
+3. Add to workspace: `go work use ./adapter/newadapter`
+4. Implement interface and module
+5. Update root Makefile if needed
 
 ---
 
@@ -389,7 +454,7 @@ migrations/{timestamp}_{description}.go          # Go migrations (GORM)
 
 ### Framework Configuration
 
-Framework components read configuration from these keys:
+Framework components read configuration from standard keys:
 
 ```yaml
 # Example: configs/config.yaml
@@ -427,51 +492,60 @@ auth:
 
 ## Testing Structure
 
-### Unit Tests
+### Core Library Tests
 
 Located alongside source files:
 
 ```
-pkg/hyperlog/
+hyperion/
 ├── logger.go
-├── zap.go
-├── zap_test.go          # Unit tests for Zap logger
-└── module_test.go       # Module initialization tests
+├── logger_noop.go
+├── logger_test.go      # Tests for Logger interface and NoOp
+├── module.go
+└── module_test.go      # Tests for module system
 ```
 
-### Integration Tests
+### Adapter Tests
 
-Located in separate directory or marked with build tags:
+Each adapter has its own tests:
 
 ```
-pkg/hyperdb/
-├── integration_test.go  # Integration tests (database required)
-└── testdata/            # Test fixtures
-    └── schema.sql
+adapter/viper/
+├── provider.go
+├── provider_test.go    # Unit tests
+└── integration_test.go # Integration tests (file watching, etc.)
 ```
 
 ### Test Utilities
 
 ```
-internal/testutil/       # Shared test utilities
+internal/testutil/       # Shared test utilities (planned)
 ├── fixtures.go          # Test data builders
 ├── assertions.go        # Custom assertions
-└── mock_context.go      # Mock hyperctx.Context
+└── mock_context.go      # Mock hyperion.Context
 ```
 
 ---
 
 ## Development Workflow Locations
 
-### Pre-commit Hooks
+### Build System
 
-```
-.git/hooks/
-├── commit-msg           # Validates commit message format
-└── pre-commit           # Runs linter and tests
+**Root Makefile**: Unified build system for all modules
+
+```makefile
+# All workspace modules
+MODULES := hyperion adapter/viper
+
+.PHONY: test
+test: ## Run tests across all modules
+	@for module in $(MODULES); do \
+		echo "Testing $$module..."; \
+		(cd $$module && go test -v -race ./...) || exit 1; \
+	done
 ```
 
-### CI/CD Configuration
+### CI/CD Configuration (Planned)
 
 ```
 .github/workflows/
@@ -483,13 +557,45 @@ internal/testutil/       # Shared test utilities
 ### Build Artifacts
 
 ```
-build/                   # Build output directory
+build/                   # Build output directory (planned)
 ├── bin/                 # Compiled binaries
-│   └── server
 └── docker/              # Docker build context
-    └── Dockerfile
 ```
 
 ---
 
-**Last Updated**: January 2025
+## Version Comparison
+
+### v1.0 Structure (Deprecated)
+
+```
+hyperion/
+└── pkg/
+    ├── hyperion/
+    ├── hyperctx/
+    ├── hyperlog/
+    ├── hyperdb/
+    └── ...
+```
+
+### v2.0 Structure (Current)
+
+```
+hyperion/
+├── hyperion/           # Core interfaces + NoOp
+└── adapter/
+    ├── viper/          # Config adapter
+    ├── zap/            # Logger adapter (planned)
+    └── ...
+```
+
+**Key Differences**:
+- No `pkg/` prefix in v2.0
+- Adapters are separate modules
+- NoOp implementations in same package as interfaces
+- Independent versioning per adapter
+
+---
+
+**Last Updated**: October 2025
+**Version**: 2.0 (Monorepo Architecture)

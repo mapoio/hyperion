@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
       - name: Install gocyclo
         run: go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
@@ -37,9 +37,9 @@ jobs:
           echo "# Cyclomatic Complexity Report" > cyclo_report.md
           echo "" >> cyclo_report.md
 
-          # Get overall stats
-          total_funcs=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | wc -l || echo 0)
-          high_complexity=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocyclo -over 15 {} \; 2>/dev/null | wc -l || echo 0)
+          # Get overall stats (check all modules in monorepo)
+          total_funcs=$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | wc -l || echo 0)
+          high_complexity=$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 15 {} \; 2>/dev/null | wc -l || echo 0)
 
           echo "**Total Functions**: $total_funcs" >> cyclo_report.md
           echo "**High Complexity (>15)**: $high_complexity" >> cyclo_report.md
@@ -49,7 +49,7 @@ jobs:
           echo "### Top 10 Most Complex Functions" >> cyclo_report.md
           echo "" >> cyclo_report.md
           echo "\`\`\`" >> cyclo_report.md
-          find ./pkg -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | sort -rn | head -10 || echo "No functions found"
+          find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | sort -rn | head -10 || echo "No functions found"
           echo "\`\`\`" >> cyclo_report.md
 
           # Store metrics
@@ -62,9 +62,9 @@ jobs:
           echo "# Cognitive Complexity Report" > cognit_report.md
           echo "" >> cognit_report.md
 
-          # Get overall stats
-          total_funcs=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | wc -l || echo 0)
-          high_cognit=$(find ./pkg -name "*.go" -not -name "*_test.go" -exec gocognit -over 20 {} \; 2>/dev/null | wc -l || echo 0)
+          # Get overall stats (check all modules in monorepo)
+          total_funcs=$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | wc -l || echo 0)
+          high_cognit=$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 20 {} \; 2>/dev/null | wc -l || echo 0)
 
           echo "**Total Functions**: $total_funcs" >> cognit_report.md
           echo "**High Cognitive Complexity (>20)**: $high_cognit" >> cognit_report.md
@@ -74,7 +74,7 @@ jobs:
           echo "### Top 10 Functions (Cognitive)" >> cognit_report.md
           echo "" >> cognit_report.md
           echo "\`\`\`" >> cognit_report.md
-          find ./pkg -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | sort -rn | head -10 || echo "No functions found"
+          find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | sort -rn | head -10 || echo "No functions found"
           echo "\`\`\`" >> cognit_report.md
 
           echo "high_cognit=$high_cognit" >> $GITHUB_OUTPUT
@@ -85,8 +85,8 @@ jobs:
           echo "# Code Duplication Report" > dupl_report.md
           echo "" >> dupl_report.md
 
-          # Run dupl with threshold of 50 tokens
-          dupl_output=$(find ./pkg -name "*.go" -not -name "*_test.go" | xargs dupl -threshold 50 2>/dev/null || echo "")
+          # Run dupl with threshold of 50 tokens (check all modules in monorepo)
+          dupl_output=$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" | xargs dupl -threshold 50 2>/dev/null || echo "")
 
           # Initialize dupl_count
           dupl_count=0

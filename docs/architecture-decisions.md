@@ -1,7 +1,8 @@
 # Hyperion Architecture Decision Records (ADR)
 
-**Version**: 1.0
-**Date**: January 2025
+**Version**: 2.0
+**Date**: October 2025
+**Status**: Updated for v2.0 Core-Adapter Architecture
 
 This document records key architectural decisions made during the design of the Hyperion framework and the rationale behind them.
 
@@ -10,20 +11,20 @@ This document records key architectural decisions made during the design of the 
 ## Table of Contents
 
 1. [ADR-001: Choosing go.uber.org/fx as the Dependency Injection Framework](#adr-001-choosing-gouberorgfx-as-the-dependency-injection-framework)
-2. [ADR-002: hyperctx.Context Design - Type-Safe Context](#adr-002-hyperctxcontext-design---type-safe-context)
-3. [ADR-003: Full OpenTelemetry Integration into Context](#adr-003-full-opentelemetry-integration-into-context)
-4. [ADR-004: Error Handling - Typed Error Code Design](#adr-004-error-handling---typed-error-code-design)
-5. [ADR-005: UnitOfWork Pattern for Transaction Management](#adr-005-unitofwork-pattern-for-transaction-management)
-6. [ADR-006: Configuration Hot Reload Support](#adr-006-configuration-hot-reload-support)
-7. [ADR-007: Dynamic Log Level Adjustment](#adr-007-dynamic-log-level-adjustment)
-8. [ADR-008: Modular Architecture - Microkernel Design](#adr-008-modular-architecture---microkernel-design)
+2. [ADR-002: Context Accessor Pattern Design](#adr-002-context-accessor-pattern-design)
+3. [ADR-003: OpenTelemetry-Compatible Tracing Without Direct Dependency](#adr-003-opentelemetry-compatible-tracing-without-direct-dependency)
+4. [ADR-004: Core-Adapter Pattern for Zero Lock-in](#adr-004-core-adapter-pattern-for-zero-lock-in)
+5. [ADR-005: NoOp Implementations in Same Package](#adr-005-noop-implementations-in-same-package)
+6. [ADR-006: Monorepo Structure with Go Workspace](#adr-006-monorepo-structure-with-go-workspace)
+7. [ADR-007: Two-Mode Module System (CoreModule vs CoreWithoutDefaultsModule)](#adr-007-two-mode-module-system-coremodule-vs-corewithoutdefaultsmodule)
+8. [ADR-008: Simple fx.Provide for Default Implementations](#adr-008-simple-fxprovide-for-default-implementations)
 
 ---
 
 ## ADR-001: Choosing go.uber.org/fx as the Dependency Injection Framework
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v1.0 and v2.0)
 
 ### Context
 We need a mature dependency injection framework to manage component lifecycles and dependencies.
@@ -57,471 +58,579 @@ Choose `go.uber.org/fx` as the core dependency injection framework.
 - Learning curve (for developers unfamiliar with DI)
 - Slightly longer startup time (dependency graph construction)
 
+### v2.0 Impact
+fx remains the ONLY dependency in the core library, reinforcing zero lock-in principle.
+
 ### References
 - [fx Documentation](https://uber-go.github.io/fx/)
 
 ---
 
-## ADR-002: hyperctx.Context Design - Type-Safe Context
+## ADR-002: Context Accessor Pattern Design
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v2.0 - Revised from v1.0)
 
 ### Context
-Go's standard `context.Context` uses `Value()` for passing data, which is not type-safe, error-prone, and hard to maintain.
+Go's standard `context.Context` uses `Value()` for passing data, which is not type-safe. We need a solution that provides type-safe access to dependencies WITHOUT polluting the Context interface with all methods from Logger, Tracer, DB, etc.
 
 ### Decision
-Design `hyperctx.Context` interface that embeds `context.Context` and provides type-safe dependency access.
+Design `hyperion.Context` interface with **accessor methods** that return fully-functional interfaces.
 
-### Core Design
+### Core Design (v2.0)
 
 ```go
 type Context interface {
     context.Context
 
-    Logger() hyperlog.Logger  // Type-safe
-    DB() *gorm.DB             // Type-safe
-    User() User               // Type-safe
-    Span() trace.Span         // Type-safe
-
-    // Tracing methods
-    StartSpan(layer, component, operation string) (Context, func())
-    RecordError(err error)
-    SetAttributes(attrs ...attribute.KeyValue)
+    // Core dependency accessors - ONLY accessors
+    Logger() Logger
+    DB() Executor
+    Tracer() Tracer
 
     // Context management
     WithTimeout(timeout time.Duration) (Context, context.CancelFunc)
     WithCancel() (Context, context.CancelFunc)
+    WithDeadline(deadline time.Time) (Context, context.CancelFunc)
 }
 ```
 
 ### Rationale
 
-**Advantages:**
-1. **Type Safety**: Compile-time checking, avoids type assertion errors
-2. **IDE-Friendly**: Auto-completion, clear interface definitions
-3. **Integrated Tracing**: OpenTelemetry operations integrated into Context
-4. **Simplified API**: `ctx.Logger()` is cleaner than `ctx.Value("logger").(Logger)`
-5. **Immutability**: `WithXxx()` returns new instances, avoiding concurrency issues
+**Why Accessor Pattern?**
+1. **Clean Interface**: Context remains minimal and focused
+2. **Separation of Concerns**: Each interface (Logger, Tracer, DB) has clear responsibility
+3. **Easier Testing**: Mock individual components independently
+4. **Interface Evolution**: Changes to Logger/Tracer don't affect Context
+5. **Explicit Usage**: `ctx.Logger().Info()` is clearer than `ctx.Info()`
 
-**Alternatives Considered:**
-- **Standard context.Context + Value()**: Flexible but not type-safe
-- **Global Variables**: Violates dependency injection principles, hard to test
-- **Multiple Function Parameters**: Bloated function signatures
+**Comparison with v1.0 Design:**
+
+| Aspect | v1.0 (Rejected) | v2.0 (Accepted) |
+|--------|-----------------|-----------------|
+| **Context Methods** | All methods exposed (`ctx.Info()`, `ctx.RecordError()`) | Only accessors (`ctx.Logger()`, `ctx.Tracer()`) |
+| **Interface Size** | Large (30+ methods) | Small (6 methods) |
+| **Clarity** | Less explicit | More explicit |
+| **Testability** | Harder to mock Context | Easy to mock individual components |
+
+**Usage Pattern:**
+
+```go
+// v2.0 Accessor Pattern
+func (s *UserService) GetByID(ctx hyperion.Context, id string) (*User, error) {
+    // Access tracer through accessor
+    _, span := ctx.Tracer().Start(ctx, "UserService.GetByID")
+    defer span.End()
+
+    // Use span methods directly
+    span.SetAttributes(hyperion.String("user_id", id))
+
+    // Access logger through accessor
+    ctx.Logger().Info("fetching user", "user_id", id)
+
+    // Access database through accessor
+    return s.userRepo.FindByID(ctx, id)
+}
+```
 
 ### Consequences
 
 **Positive:**
 - Improved code readability
-- Errors caught at compile time
-- Unified context management approach
+- Clear separation of concerns
+- Easier to extend without breaking Context interface
+- Compatible with standard `context.Context`
 
 **Negative:**
-- Requires type conversion `ctx.(hyperctx.Context)` (one-time, at entry points)
-- Not fully compatible with standard library (mitigated by embedding `context.Context`)
+- One extra method call: `ctx.Logger().Info()` vs `ctx.Info()`
+- Requires type conversion at entry points: `ctx.(hyperion.Context)`
+
+### User Feedback Integration
+This decision directly implements user feedback:
+> "tracer和其他的接口一样在context直接在Tracer中就行了，不要全部都暴露在context中"
 
 ---
 
-## ADR-003: Full OpenTelemetry Integration into Context
+## ADR-003: OpenTelemetry-Compatible Tracing Without Direct Dependency
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v2.0)
 
 ### Context
-Distributed tracing requires creating spans in every function, and the traditional approach requires introducing additional tracer objects.
+We need distributed tracing support, but requiring OpenTelemetry as a core dependency would violate the zero lock-in principle.
 
 ### Decision
-Directly integrate OpenTelemetry tracing operations into the `hyperctx.Context` interface.
+Define tracing interfaces in core that are OpenTelemetry-compatible, with actual OTel integration provided via adapter.
 
-### Core Methods
+### Core Design
 
+**Core Interfaces** (`hyperion/tracer.go`):
 ```go
-StartSpan(layer, component, operation string) (Context, func())
-RecordError(err error)
-SetAttributes(attrs ...attribute.KeyValue)
-AddEvent(name string, attrs ...attribute.KeyValue)
+type Tracer interface {
+    Start(ctx context.Context, spanName string, opts ...SpanOption) (context.Context, Span)
+}
+
+type Span interface {
+    End(opts ...SpanEndOption)
+    SetAttributes(attrs ...Attribute)
+    RecordError(err error, opts ...EventOption)
+    AddEvent(name string, opts ...EventOption)
+    SpanContext() SpanContext
+}
+
+type Attribute struct {
+    Key   string
+    Value any
+}
+```
+
+**Adapter Implementation** (`adapter/otel` - planned):
+```go
+type otelTracer struct {
+    tracer trace.Tracer
+}
+
+func (t *otelTracer) Start(ctx context.Context, spanName string, opts ...hyperion.SpanOption) (context.Context, hyperion.Span) {
+    ctx, span := t.tracer.Start(ctx, spanName)
+    return ctx, &otelSpan{span: span}
+}
 ```
 
 ### Rationale
 
 **Advantages:**
-1. **Zero Intrusion**: No need for separate `tracer` objects
-2. **Automatic Propagation**: Spans automatically passed in Context
-3. **Concise API**: One line of code to create a span
-4. **Naming Convention**: Enforces `{layer}.{component}.{operation}` format
-5. **Error Association**: `RecordError()` automatically associates with current span
+1. **Zero Lock-in**: Core has no OTel dependency
+2. **OTel Compatible**: Semantics match OpenTelemetry
+3. **Flexible**: Can wrap other tracing systems (Jaeger, Zipkin)
+4. **Type-Safe**: Attribute helpers prevent errors
+5. **Simplified API**: No need to import `attribute` package
 
-**Usage Comparison:**
+**Comparison with Alternatives:**
 
+| Approach | Core Dependency | Flexibility | Complexity |
+|----------|----------------|-------------|------------|
+| **Direct OTel** | ❌ High | ❌ Low | Low |
+| **Our Approach** | ✅ Zero | ✅ High | Medium |
+| **Custom Tracing** | ✅ Zero | ❌ Low | High |
+
+### Usage
+
+**Service Layer:**
 ```go
-// Traditional approach
-tracer := otel.Tracer("app")
-ctx, span := tracer.Start(ctx, "service.UserService.GetByID")
+_, span := ctx.Tracer().Start(ctx, "UserService.GetByID")
 defer span.End()
-span.SetAttributes(attribute.String("user_id", id))
+
+span.SetAttributes(hyperion.String("user_id", id))
 if err != nil {
     span.RecordError(err)
 }
-
-// Hyperion approach
-ctx, end := ctx.StartSpan("service", "UserService", "GetByID")
-defer end()
-ctx.SetAttributes(attribute.String("user_id", id))
-if err != nil {
-    ctx.RecordError(err)
-}
 ```
 
 ### Consequences
 
 **Positive:**
-- More concise code
-- Enforces standardized span naming
-- Reduces cognitive load for developers
+- Framework users can choose tracing backend
+- Easy to test with NoOp tracer
+- Compatible with standard OpenTelemetry tools
 
 **Negative:**
-- Need to learn Hyperion-specific API (but simpler)
+- Need to maintain compatibility with OTel semantics
+- Attribute conversion overhead (minimal)
 
 ---
 
-## ADR-004: Error Handling - Typed Error Code Design
+## ADR-004: Core-Adapter Pattern for Zero Lock-in
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v2.0 - NEW)
 
 ### Context
-We need a unified error handling mechanism that supports HTTP/gRPC status code mapping and can carry business context.
+v1.0 bundled all implementations (Zap, GORM, Viper) which created tight coupling and made it difficult to swap implementations.
 
 ### Decision
-Design a typed `Code` struct and `Error` type with multi-layer wrapping support.
+Adopt **Core-Adapter Pattern** with strict separation:
+- **Core** (`hyperion/`): Defines interfaces, ZERO 3rd-party dependencies
+- **Adapters** (`adapter/*/`): Provide concrete implementations
 
-### Core Design
+### Architecture
 
+```
+┌─────────────────┐
+│  Application    │
+└────────┬────────┘
+         │ depends on
+         ▼
+┌─────────────────┐
+│ hyperion.Logger │ (interface)
+│ hyperion.Tracer │
+│ hyperion.DB     │
+└────────┬────────┘
+         │ implemented by
+         ▼
+┌─────────────────┐
+│ adapter/zap     │
+│ adapter/otel    │
+│ adapter/gorm    │
+└─────────────────┘
+```
+
+### Dependency Policy
+
+**Core Library** (`hyperion/go.mod`):
 ```go
-type Code struct {
-    Code       string     // "USER_NOT_FOUND"
-    HTTPStatus int        // 404
-    GRPCCode   codes.Code // codes.NotFound
-}
+module github.com/mapoio/hyperion
 
-var CodeNotFound = Code{"NOT_FOUND", 404, codes.NotFound}
+require go.uber.org/fx v1.24.0  // ONLY dependency
+```
 
-type Error struct {
-    code    Code
-    message string
-    cause   error          // Support wrapping
-    fields  map[string]any // Business context
-}
+**Viper Adapter** (`adapter/viper/go.mod`):
+```go
+module github.com/mapoio/hyperion/adapter/viper
 
-// Convenient constructors
-func NotFound(message string) *Error
-func Wrap(code Code, message string, err error) *Error
+require (
+    github.com/mapoio/hyperion v0.0.0
+    github.com/spf13/viper v1.21.0
+)
 ```
 
 ### Rationale
 
 **Advantages:**
-1. **Type Safety**: `Code` is a typed constant, not a string
-2. **Automatic Mapping**: One Code contains both HTTP and gRPC status codes
-3. **Multi-Layer Wrapping**: Supports standard `errors.Unwrap()` interface
-4. **Context Fields**: `WithField()` adds business information
-5. **Reduced Boilerplate**: Predefined common error constructors
+1. **Zero Lock-in**: Users choose implementations
+2. **Independent Versioning**: Adapters upgrade independently
+3. **Easy Testing**: Test with NoOp, run with real adapters
+4. **Smaller Binaries**: Import only needed adapters
+5. **Clear Boundaries**: Interface contracts prevent leakage
 
-**Comparison with Other Approaches:**
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| Standard `error` | Simple | No status code, no context |
-| `pkg/errors` | Stack support | No status code mapping |
-| String error codes | Flexible | Not type-safe |
-| **Hyperion Code** | Type-safe + status + wrapping | Need to learn new API |
-
-### Usage Examples
-
-```go
-// Simple error
-return hypererror.NotFound("user not found")
-
-// With fields
-return hypererror.ResourceNotFound("user", userID)
-
-// Wrap error
-return hypererror.InternalWrap("query failed", err)
-
-// Multi-layer wrapping
-return hypererror.Wrap(
-    hypererror.CodeInternal,
-    "failed to create user",
-    err,
-).WithField("email", email)
-```
+**Migration Path:**
+- v1.0 users: Change imports, add adapter modules to fx.New()
+- New users: Start with CoreModule, add adapters as needed
 
 ### Consequences
 
 **Positive:**
-- Unified error handling approach
-- Automatic HTTP/gRPC response conversion
-- Rich error context
+- Framework is truly pluggable
+- Community can provide custom adapters
+- Easier to maintain and test
 
 **Negative:**
-- Need to learn Hyperion error API
+- Users must explicitly choose adapters
+- More import statements (mitigated by clear documentation)
 
 ---
 
-## ADR-005: UnitOfWork Pattern for Transaction Management
+## ADR-005: NoOp Implementations in Same Package
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v2.0 - NEW)
 
 ### Context
-Database transaction boundaries should be managed at the Service layer, but the Repository layer should not be aware of transactions.
+We need default implementations that allow applications to start without configuration, but where should they live?
 
 ### Decision
-Implement `UnitOfWork` interface to declaratively manage transactions via `WithTransaction()`.
+Place NoOp implementations in the same package as interfaces (`hyperion/logger_noop.go`), not in a separate `internal/` package.
 
-### Core Design
+### File Organization
 
-```go
-type UnitOfWork interface {
-    WithTransaction(ctx hyperctx.Context, fn func(txCtx hyperctx.Context) error) error
-}
+```
+hyperion/
+├── logger.go       # Logger interface
+├── logger_noop.go  # NoOp Logger
+├── tracer.go       # Tracer interface
+├── tracer_noop.go  # NoOp Tracer
+├── ...
+```
 
-// Automatic transaction propagation
-func (ctx *hyperContext) DB() *gorm.DB {
-    return ctx.db // Automatically returns tx or pool
-}
+**Previous Approach (Rejected):**
+```
+hyperion/internal/noop.go → Complex adapters → hyperion/defaults.go
+```
+
+**Current Approach:**
+```
+hyperion/logger_noop.go → hyperion/defaults.go (simple fx.Provide)
 ```
 
 ### Rationale
 
 **Advantages:**
-1. **Declarative**: Service layer clearly declares transaction boundaries
-2. **Automatic Propagation**: `ctx.DB()` automatically recognizes transaction context
-3. **Repository Transparent**: Repository doesn't need to care if it's in a transaction
-4. **Automatic Rollback**: Function returning error automatically rolls back
-5. **Nested Calls**: Services can call each other, transactions propagate naturally
+1. **Simplicity**: No complex adapter pattern needed
+2. **Clarity**: Interface definition + default impl co-located
+3. **Zero Circular Deps**: Direct implementation of public interfaces
+4. **User Friendly**: `hyperion.NewNoOpLogger()` is intuitive
+5. **Less Code**: Fewer types, simpler logic
 
-**Usage Comparison:**
+**Comparison:**
+
+| Approach | Files | Complexity | Type Safety |
+|----------|-------|------------|-------------|
+| **internal/** | More | High (adapters needed) | Medium |
+| **Same Package** | Fewer | Low (direct impl) | High |
+
+### Implementation
 
 ```go
-// Traditional approach
-tx := db.Begin()
-if err := repo.Create(tx, user); err != nil {
-    tx.Rollback()
-    return err
+// hyperion/logger_noop.go
+type noopLogger struct {
+    level LogLevel
 }
-if err := repo.CreateProfile(tx, profile); err != nil {
-    tx.Rollback()
-    return err
-}
-tx.Commit()
 
-// Hyperion UnitOfWork
-uow.WithTransaction(ctx, func(txCtx hyperctx.Context) error {
-    if err := repo.Create(txCtx, user); err != nil {
-        return err // Auto rollback
-    }
-    if err := repo.CreateProfile(txCtx, profile); err != nil {
-        return err // Auto rollback
-    }
-    return nil // Auto commit
-})
+func NewNoOpLogger() Logger {
+    return &noopLogger{level: InfoLevel}
+}
+
+func (l *noopLogger) Info(msg string, fields ...any) {}
+// ... all methods are no-op
 ```
 
 ### Consequences
 
 **Positive:**
-- More concise code
-- Reduced transaction management errors
-- Unified transaction boundary management
+- Simpler codebase
+- Easier to understand for newcomers
+- Direct interface implementation
 
 **Negative:**
-- No support for nested transactions (GORM limitation, can use savepoints)
+- NoOp types visible in package namespace (mitigated by lowercase naming)
 
 ---
 
-## ADR-006: Configuration Hot Reload Support
+## ADR-006: Monorepo Structure with Go Workspace
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v2.0 - NEW)
 
 ### Context
-Production environments need to dynamically adjust configurations (e.g., log levels) without restarting services.
+v1.0 used a single module structure (`pkg/hyper*`). We need better modularity and independent versioning for adapters.
 
 ### Decision
-`hyperconfig.Provider` provides `Watch()` interface to support configuration change callbacks.
+Adopt Go workspace-based monorepo with independent modules.
 
-### Core Design
+### Structure
 
-```go
-type Watcher interface {
-    Watch(callback func(event ChangeEvent)) (stop func(), err error)
-}
+```
+hyperion/                    # Monorepo root
+├── go.work                  # Workspace definition
+├── hyperion/                # Core library (zero 3rd-party deps)
+│   └── go.mod
+└── adapter/                 # Adapter implementations
+    ├── viper/               # Config adapter
+    │   └── go.mod
+    ├── zap/                 # Logger adapter (planned)
+    │   └── go.mod
+    └── gorm/                # Database adapter (planned)
+        └── go.mod
+```
 
-// Usage example
-cfgProvider.Watch(func(event ChangeEvent) {
-    // Reload configuration
-    var cfg LogConfig
-    cfgProvider.Unmarshal("log", &cfg)
-    logger.SetLevel(cfg.Level)
-})
+**Workspace Definition** (`go.work`):
+```
+go 1.24
+
+use (
+    ./hyperion
+    ./adapter/viper
+)
 ```
 
 ### Rationale
 
 **Advantages:**
-1. **Runtime Adjustment**: No need to restart services
-2. **Multiple Sources**: File (fsnotify) / Consul / Etcd
-3. **Callback Mechanism**: Components can independently listen for config changes
-4. **Safety**: Config validation failures don't affect existing config
+1. **Independent Versioning**: Each adapter can have own version
+2. **Zero Circular Dependencies**: Clear module boundaries
+3. **Selective Import**: Users import only needed adapters
+4. **Easier Testing**: Test each module independently
+5. **Clear Ownership**: Each module has own go.mod
 
-**Implementation:**
-- File config: Use `fsnotify` to watch file changes
-- Consul: Use Watch API with long polling
-- Etcd: Use Watch API
+**Alternatives Considered:**
+- **Single Module**: Simpler but forces all dependencies on users
+- **Separate Repos**: Maximum independence but harder to maintain
+- **Multi-Module in Single Repo without Workspace**: Complex to manage
 
 ### Consequences
 
 **Positive:**
-- Enhanced operational flexibility
-- Support for dynamic config adjustments
+- Clean separation of concerns
+- Better dependency management
+- Easier to contribute new adapters
 
 **Negative:**
-- Increased implementation complexity
-- Need to handle concurrency safety for config changes
+- Requires Go 1.18+ for workspace support
+- Slightly more complex initial setup
 
 ---
 
-## ADR-007: Dynamic Log Level Adjustment
+## ADR-007: Two-Mode Module System (CoreModule vs CoreWithoutDefaultsModule)
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v2.0 - NEW)
 
 ### Context
-Troubleshooting production issues requires temporarily elevating log levels without restarting services.
+Different use cases need different levels of strictness:
+- Development: Quick start with defaults
+- Production: Explicit adapter choice
 
 ### Decision
-`hyperlog.Logger` provides `SetLevel()` method to support runtime adjustment.
+Provide two core modules with different behaviors.
 
-### Core Design
+### Module Definitions
 
+**CoreModule** (Developer-Friendly):
 ```go
-type Logger interface {
-    SetLevel(level Level)
-    GetLevel() Level
-}
+var CoreModule = fx.Module("hyperion.core",
+    fx.Options(
+        DefaultLoggerModule,    // NoOp Logger
+        DefaultTracerModule,    // NoOp Tracer
+        DefaultDatabaseModule,  // NoOp Database
+        DefaultConfigModule,    // NoOp Config
+        DefaultCacheModule,     // NoOp Cache
+    ),
+)
+```
 
-// Integration with config hot reload
-cfgProvider.Watch(func(event ChangeEvent) {
-    var cfg LogConfig
-    cfgProvider.Unmarshal("log", &cfg)
-    logger.SetLevel(parseLevel(cfg.Level))
-})
+**CoreWithoutDefaultsModule** (Production-Strict):
+```go
+var CoreWithoutDefaultsModule = fx.Module("hyperion.core.minimal",
+    // No default implementations
+)
+```
+
+### Usage
+
+**Development:**
+```go
+fx.New(
+    hyperion.CoreModule,  // Works immediately
+    app.Module,
+).Run()
+```
+
+**Production:**
+```go
+fx.New(
+    hyperion.CoreWithoutDefaultsModule,
+    viper.Module,  // MUST provide
+    zap.Module,    // MUST provide
+    gorm.Module,   // MUST provide
+    app.Module,
+).Run()
+// Missing adapter = fx error at startup
 ```
 
 ### Rationale
 
 **Advantages:**
-1. **Runtime Adjustment**: No restart needed
-2. **Controlled Performance Impact**: Log level checking on hot path, Zap uses atomic
-3. **Config System Integration**: Automatically takes effect via config hot reload
+1. **Flexibility**: Users choose strictness level
+2. **Quick Start**: CoreModule works out-of-box
+3. **Safety**: Production forces explicit choices
+4. **Clear Intent**: Module name indicates behavior
 
-**Implementation:**
-- Use `zap.AtomicLevel` to ensure concurrency safety
-- Call `SetLevel()` on config changes
+**Comparison:**
+
+| Aspect | CoreModule | CoreWithoutDefaultsModule |
+|--------|------------|---------------------------|
+| **Startup** | Always works | Requires all adapters |
+| **Use Case** | Dev, Testing, Prototyping | Production |
+| **Safety** | Permissive | Strict |
+| **Dependencies** | None (NoOp) | Must provide all |
 
 ### Consequences
 
 **Positive:**
-- Improved troubleshooting efficiency
-- Reduced production environment risk
+- Balances ease of use with production safety
+- Clear migration path (start with Core, move to Strict)
+- No surprises in production
 
 **Negative:**
-- Need to ensure concurrency safety for log level changes
+- Two modules to maintain (low overhead)
+- Need to document when to use each
 
 ---
 
-## ADR-008: Modular Architecture - Microkernel Design
+## ADR-008: Simple fx.Provide for Default Implementations
 
 ### Status
-✅ **Accepted**
+✅ **Accepted** (v2.0 - NEW)
 
 ### Context
-The framework should be lightweight, and applications should only import needed functionality.
+We need to provide default (NoOp) implementations. Should we use complex decoration or simple provision?
 
 ### Decision
-Adopt microkernel architecture, providing all functionality as `fx.Module`.
+Use simple `fx.Provide` without `fx.Decorate` complexity.
 
-### Core Design
+### Implementation
 
+**Approach Chosen:**
 ```go
-// Core entry
-func Core() fx.Option {
-    return fx.Options(
-        hyperconfig.Module,
-        hyperlog.Module,
-        hyperdb.Module,
-    )
-}
+var DefaultLoggerModule = fx.Module("hyperion.default_logger",
+    fx.Provide(func() Logger {
+        fmt.Println("[Hyperion] Using no-op Logger")
+        return NewNoOpLogger()
+    }),
+)
+```
 
-// Web application
-func Web() fx.Option {
-    return fx.Options(Core(), hyperweb.Module)
-}
-
-// gRPC application
-func GRPC() fx.Option {
-    return fx.Options(Core(), hypergrpc.Module)
-}
-
-// Full-stack application
-func FullStack() fx.Option {
-    return fx.Options(Core(), hyperweb.Module, hypergrpc.Module)
-}
+**Approach Rejected:**
+```go
+// ❌ Overly complex, Decorate doesn't work as expected
+fx.Provide(func() Logger { return nil }),
+fx.Decorate(func(logger Logger) Logger {
+    if logger == nil { return NewNoOpLogger() }
+    return logger
+}),
 ```
 
 ### Rationale
 
 **Advantages:**
-1. **Import on Demand**: Applications only import needed modules
-2. **Independent Evolution**: Modules can be upgraded independently
-3. **Clear Boundaries**: Clear dependencies between modules
-4. **Easy Extension**: Third parties can provide custom modules
+1. **Simplicity**: Straightforward to understand
+2. **Explicit**: Clear what's being provided
+3. **fx Best Practice**: Aligns with fx documentation
+4. **Override Mechanism**: Later modules override via fx precedence
+5. **No Magic**: No nil checks or decoration logic
 
-**Module List:**
-
-| Module | Required | Description |
-|--------|----------|-------------|
-| `hyperconfig` | ✅ | Configuration management |
-| `hyperlog` | ✅ | Logging |
-| `hyperdb` | ❌ | Database (optional) |
-| `hypercache` | ❌ | Cache (optional) |
-| `hyperweb` | ❌ | Web server (optional) |
-| `hypergrpc` | ❌ | gRPC server (optional) |
+**How Override Works:**
+```go
+fx.New(
+    hyperion.CoreModule,      // Provides NoOp Logger
+    zap.Module,               // Overrides with Zap Logger
+)
+// User gets Zap Logger (last provider wins)
+```
 
 ### Consequences
 
 **Positive:**
-- Smaller application binaries
-- Clearer dependencies
-- Easier to understand and maintain
+- Easier to understand
+- Less code
+- Clear override semantics
 
 **Negative:**
-- Need to explicitly import modules
+- None significant
 
 ---
 
 ## Summary
 
-Hyperion framework's core design decisions revolve around these principles:
+Hyperion v2.0's architectural decisions revolve around these principles:
 
-1. **Type Safety**: Achieved through `hyperctx.Context` and `hypererror.Code`
-2. **Concise API**: Tracing integrated into Context, reduced boilerplate
-3. **Declarative**: UnitOfWork transaction management, fx dependency injection
-4. **Runtime Flexibility**: Config hot reload, dynamic log levels
-5. **Modularity**: Microkernel architecture, import on demand
+1. **Zero Lock-in**: Core-adapter pattern with zero core dependencies
+2. **Type Safety**: Accessor pattern for clean interfaces
+3. **Flexibility**: Two-mode module system for different use cases
+4. **Simplicity**: NoOp in same package, simple fx.Provide
+5. **Modularity**: Monorepo with independent adapter modules
 
-These decisions collectively form Hyperion's technical foundation, making it a production-grade, observable, and maintainable Go backend framework.
+These decisions collectively make Hyperion a truly pluggable, production-ready Go framework without vendor lock-in.
+
+---
+
+## Migration from v1.0
+
+| v1.0 Decision | v2.0 Change | Impact |
+|---------------|-------------|--------|
+| Direct OTel integration | OTel-compatible interfaces | Zero core dependency |
+| pkg/hyper* structure | Monorepo with adapters | Independent versioning |
+| Rich Context interface | Accessor pattern | Cleaner interfaces |
+| Bundled implementations | Core-adapter pattern | True pluggability |
 
 ---
 

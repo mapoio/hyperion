@@ -1,4 +1,4 @@
-package hyperconfig
+package viper
 
 import (
 	"fmt"
@@ -9,22 +9,24 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+
+	"github.com/mapoio/hyperion"
 )
 
-// ViperProvider is a Provider implementation based on spf13/viper.
+// Provider is a hyperion.ConfigWatcher implementation based on spf13/viper.
 // It supports multiple configuration formats (YAML, JSON, TOML) and
-// automatic environment variable override.
-type ViperProvider struct {
-	v          *viper.Viper                 // Viper instance
-	watcher    *fsnotify.Watcher            // File system watcher
-	callbacks  map[uint64]func(ChangeEvent) // Registered callbacks
-	watchDone  chan struct{}                // Signal to stop watching
-	configPath string                       // Original config file path
-	mu         sync.RWMutex                 // Protects callbacks and viper access
-	nextCallID uint64                       // Atomic counter for callback IDs
+// automatic environment variable override with hot reload capabilities.
+type Provider struct {
+	v          *viper.Viper                          // Viper instance
+	watcher    *fsnotify.Watcher                     // File system watcher
+	callbacks  map[uint64]func(hyperion.ChangeEvent) // Registered callbacks
+	watchDone  chan struct{}                         // Signal to stop watching
+	configPath string                                // Original config file path
+	mu         sync.RWMutex                          // Protects callbacks and viper access
+	nextCallID uint64                                // Atomic counter for callback IDs
 }
 
-// NewViperProvider creates a new ViperProvider from the given configuration file path.
+// NewProvider creates a new viper-based config provider from the given configuration file path.
 // It automatically detects the file format based on the file extension.
 //
 // Supported formats: .yaml, .yml, .json, .toml
@@ -33,7 +35,7 @@ type ViperProvider struct {
 // For example, APP_DATABASE_HOST maps to the "database.host" config key.
 //
 // Returns an error if the configuration file cannot be read or parsed.
-func NewViperProvider(configPath string) (*ViperProvider, error) {
+func NewProvider(configPath string) (hyperion.ConfigWatcher, error) {
 	v := viper.New()
 
 	// Set config file path
@@ -49,26 +51,16 @@ func NewViperProvider(configPath string) (*ViperProvider, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	return &ViperProvider{
+	return &Provider{
 		v:          v,
-		callbacks:  make(map[uint64]func(ChangeEvent)),
+		callbacks:  make(map[uint64]func(hyperion.ChangeEvent)),
 		nextCallID: 0,
 		configPath: configPath,
 	}, nil
 }
 
-// NewViperProviderWithViper creates a new ViperProvider from an existing viper instance.
-// This is useful for testing or when you need more control over viper configuration.
-func NewViperProviderWithViper(v *viper.Viper) *ViperProvider {
-	return &ViperProvider{
-		v:          v,
-		callbacks:  make(map[uint64]func(ChangeEvent)),
-		nextCallID: 0,
-	}
-}
-
 // Unmarshal unmarshals the configuration at the given key into the provided struct.
-func (p *ViperProvider) Unmarshal(key string, rawVal any) error {
+func (p *Provider) Unmarshal(key string, rawVal any) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -82,63 +74,63 @@ func (p *ViperProvider) Unmarshal(key string, rawVal any) error {
 }
 
 // Get returns the value for the given key as an interface{}.
-func (p *ViperProvider) Get(key string) any {
+func (p *Provider) Get(key string) any {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.Get(key)
 }
 
 // GetString returns the value for the given key as a string.
-func (p *ViperProvider) GetString(key string) string {
+func (p *Provider) GetString(key string) string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.GetString(key)
 }
 
 // GetInt returns the value for the given key as an int.
-func (p *ViperProvider) GetInt(key string) int {
+func (p *Provider) GetInt(key string) int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.GetInt(key)
 }
 
 // GetInt64 returns the value for the given key as an int64.
-func (p *ViperProvider) GetInt64(key string) int64 {
+func (p *Provider) GetInt64(key string) int64 {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.GetInt64(key)
 }
 
 // GetBool returns the value for the given key as a bool.
-func (p *ViperProvider) GetBool(key string) bool {
+func (p *Provider) GetBool(key string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.GetBool(key)
 }
 
 // GetFloat64 returns the value for the given key as a float64.
-func (p *ViperProvider) GetFloat64(key string) float64 {
+func (p *Provider) GetFloat64(key string) float64 {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.GetFloat64(key)
 }
 
 // GetStringSlice returns the value for the given key as a string slice.
-func (p *ViperProvider) GetStringSlice(key string) []string {
+func (p *Provider) GetStringSlice(key string) []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.GetStringSlice(key)
 }
 
 // IsSet checks if the key is set in the configuration.
-func (p *ViperProvider) IsSet(key string) bool {
+func (p *Provider) IsSet(key string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.IsSet(key)
 }
 
 // AllKeys returns all keys in the configuration.
-func (p *ViperProvider) AllKeys() []string {
+func (p *Provider) AllKeys() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.v.AllKeys()
@@ -156,7 +148,7 @@ func (p *ViperProvider) AllKeys() []string {
 // concurrent scenarios.
 //
 // Returns a stop function to cancel watching and an error if watching cannot be started.
-func (p *ViperProvider) Watch(callback func(event ChangeEvent)) (stop func(), err error) {
+func (p *Provider) Watch(callback func(event hyperion.ChangeEvent)) (stop func(), err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -214,7 +206,7 @@ func (p *ViperProvider) Watch(callback func(event ChangeEvent)) (stop func(), er
 
 // watchLoop handles file system events and reloads configuration.
 // It runs in a separate goroutine and terminates when watchDone is closed.
-func (p *ViperProvider) watchLoop() {
+func (p *Provider) watchLoop() {
 	// Get channels with lock to avoid races during shutdown
 	p.mu.RLock()
 	eventsC := p.watcher.Events
@@ -245,7 +237,7 @@ func (p *ViperProvider) watchLoop() {
 
 // handleFileEvent processes a file system event and triggers callbacks.
 // Handles atomic writes (rename/remove) used by editors and k8s ConfigMaps.
-func (p *ViperProvider) handleFileEvent(event fsnotify.Event) {
+func (p *Provider) handleFileEvent(event fsnotify.Event) {
 	// Handle atomic writes: many editors and k8s ConfigMap reloads use
 	// atomic writes (write to temp file, then rename), which triggers
 	// Rename or Remove events instead of Write.
@@ -282,13 +274,13 @@ func (p *ViperProvider) handleFileEvent(event fsnotify.Event) {
 	}
 
 	// Create change event
-	changeEvent := ChangeEvent{
+	changeEvent := hyperion.ChangeEvent{
 		Key:   filepath.Base(event.Name),
 		Value: nil,
 	}
 
 	// Snapshot callbacks while holding lock
-	callbacks := make([]func(ChangeEvent), 0, len(p.callbacks))
+	callbacks := make([]func(hyperion.ChangeEvent), 0, len(p.callbacks))
 	for _, cb := range p.callbacks {
 		callbacks = append(callbacks, cb)
 	}
