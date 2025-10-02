@@ -23,20 +23,22 @@ type zapLogger struct {
 var _ hyperion.Logger = (*zapLogger)(nil)
 
 // Config holds configuration for Zap logger.
+// Fields are ordered for optimal memory alignment.
 type Config struct {
-	Level      string      `mapstructure:"level"`    // Log level: debug, info, warn, error, fatal
-	Encoding   string      `mapstructure:"encoding"` // Encoding format: json or console
-	Output     string      `mapstructure:"output"`   // Output destination: stdout, stderr, or file path
-	FileConfig *FileConfig `mapstructure:"file"`     // File rotation configuration
+	FileConfig *FileConfig `mapstructure:"file"`     // File rotation configuration (8 bytes pointer)
+	Level      string      `mapstructure:"level"`    // Log level: debug, info, warn, error, fatal (16 bytes)
+	Encoding   string      `mapstructure:"encoding"` // Encoding format: json or console (16 bytes)
+	Output     string      `mapstructure:"output"`   // Output destination: stdout, stderr, or file path (16 bytes)
 }
 
 // FileConfig holds file rotation configuration.
+// Fields are ordered for optimal memory alignment.
 type FileConfig struct {
-	Path       string `mapstructure:"path"`        // Log file path
-	MaxSize    int    `mapstructure:"max_size"`    // Max file size in MB before rotation
-	MaxBackups int    `mapstructure:"max_backups"` // Max number of old log files to keep
-	MaxAge     int    `mapstructure:"max_age"`     // Max days to retain old log files
-	Compress   bool   `mapstructure:"compress"`    // Whether to compress rotated files
+	Path       string `mapstructure:"path"`        // Log file path (16 bytes)
+	MaxSize    int    `mapstructure:"max_size"`    // Max file size in MB before rotation (8 bytes)
+	MaxBackups int    `mapstructure:"max_backups"` // Max number of old log files to keep (8 bytes)
+	MaxAge     int    `mapstructure:"max_age"`     // Max days to retain old log files (8 bytes)
+	Compress   bool   `mapstructure:"compress"`    // Whether to compress rotated files (1 byte)
 }
 
 // NewZapLogger creates a new Zap logger instance.

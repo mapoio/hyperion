@@ -2,7 +2,7 @@
 # This Makefile runs targets across all workspace modules
 
 # All workspace modules (update when adding new modules)
-MODULES := hyperion adapter/viper
+MODULES := hyperion adapter/viper adapter/zap adapter/gorm
 
 .PHONY: help
 help: ## Display this help message

@@ -25,68 +25,160 @@ jobs:
       - name: Install code quality tools
         run: make quality-tools
 
-      - name: Run code quality report
+      - name: Run code quality report (per-module)
         id: quality
         run: |
-          # Run quality report and save output
+          # Discover all modules from go.work
+          modules=$(go list -m -f '{{.Dir}}' | sed "s|$(pwd)/||")
+
+          # Initialize aggregated metrics
+          total_funcs=0
+          total_high_complexity=0
+          total_high_cognit=0
+          total_dupl_count=0
+          module_count=0
+
+          # Create module details table
+          echo "# Module Quality Metrics" > module_details.md
+          echo "" >> module_details.md
+          echo "| Module | Functions | High Cyclo | High Cognit | Duplicates | Grade |" >> module_details.md
+          echo "|--------|-----------|------------|-------------|------------|-------|" >> module_details.md
+
+          # Process each module
+          for module in $modules; do
+            if [ -d "$module" ] && [ -f "$module/go.mod" ]; then
+              echo "Analyzing $module..."
+
+              # Run gocyclo for cyclomatic complexity
+              cd "$module"
+
+              # Count total functions (including methods)
+              # Use gocyclo output to get actual function count (it analyzes all functions)
+              all_funcs_output=$(gocyclo -over 0 . 2>/dev/null || echo "")
+              if [ -n "$all_funcs_output" ]; then
+                module_funcs=$(echo "$all_funcs_output" | wc -l | tr -d ' ')
+              else
+                module_funcs=0
+              fi
+
+              # Count high complexity functions
+              gocyclo_output=$(gocyclo -over 15 . 2>/dev/null || echo "")
+              if [ -n "$gocyclo_output" ]; then
+                module_high_cyclo=$(echo "$gocyclo_output" | wc -l | tr -d ' ')
+              else
+                module_high_cyclo=0
+              fi
+
+              # Run gocognit for cognitive complexity
+              gocognit_output=$(gocognit -over 20 . 2>/dev/null || echo "")
+              if [ -n "$gocognit_output" ]; then
+                module_high_cognit=$(echo "$gocognit_output" | wc -l | tr -d ' ')
+              else
+                module_high_cognit=0
+              fi
+
+              # Run dupl for code duplication
+              dupl_output=$(dupl -threshold 50 -files . 2>/dev/null || echo "")
+              if echo "$dupl_output" | grep -q "found.*clone"; then
+                module_dupl=$(echo "$dupl_output" | grep -c "found.*clone" || echo 0)
+              else
+                module_dupl=0
+              fi
+
+              cd - > /dev/null
+
+              # Calculate module score
+              module_score=100
+              if [ "$module_funcs" -gt 0 ]; then
+                complexity_ratio=$((module_high_cyclo * 100 / module_funcs))
+                complexity_penalty=$((complexity_ratio * 30 / 100))
+                module_score=$((module_score - complexity_penalty))
+
+                cognit_ratio=$((module_high_cognit * 100 / module_funcs))
+                cognit_penalty=$((cognit_ratio * 30 / 100))
+                module_score=$((module_score - cognit_penalty))
+              fi
+
+              if [ "$module_dupl" -gt 0 ]; then
+                dupl_penalty=$((module_dupl > 20 ? 20 : module_dupl))
+                module_score=$((module_score - dupl_penalty))
+              fi
+
+              if [ "$module_score" -lt 0 ]; then
+                module_score=0
+              fi
+
+              # Determine grade
+              if [ "$module_score" -ge 90 ]; then
+                module_grade="A 🎉"
+              elif [ "$module_score" -ge 80 ]; then
+                module_grade="B ✅"
+              elif [ "$module_score" -ge 70 ]; then
+                module_grade="C ⚠️"
+              elif [ "$module_score" -ge 60 ]; then
+                module_grade="D ⚠️"
+              else
+                module_grade="F ❌"
+              fi
+
+              # Add to table
+              echo "| \`$module\` | $module_funcs | $module_high_cyclo | $module_high_cognit | $module_dupl | $module_grade ($module_score) |" >> module_details.md
+
+              # Aggregate metrics
+              total_funcs=$((total_funcs + module_funcs))
+              total_high_complexity=$((total_high_complexity + module_high_cyclo))
+              total_high_cognit=$((total_high_cognit + module_high_cognit))
+              total_dupl_count=$((total_dupl_count + module_dupl))
+              module_count=$((module_count + 1))
+            fi
+          done
+
+          # Run overall quality report for top issues
           make quality-report > quality_output.txt 2>&1 || true
 
-          # Extract metrics from output
-          total_funcs=$(grep -oP 'Total functions: \K\d+' quality_output.txt | head -1 || echo 0)
-          high_complexity=$(grep -oP 'High complexity.*?: \K\d+' quality_output.txt | head -1 || echo 0)
-          high_cognit=$(grep -oP 'High cognitive complexity.*?: \K\d+' quality_output.txt | head -1 || echo 0)
-
-          # Check for duplication
-          if grep -q "Found.*clone groups" quality_output.txt; then
-            dupl_count=$(grep -oP 'Found \K\d+(?= clone groups)' quality_output.txt || echo 0)
-          else
-            dupl_count=0
-          fi
-
-          # Store metrics for later use
-          echo "total_funcs=$total_funcs" >> $GITHUB_OUTPUT
-          echo "high_complexity=$high_complexity" >> $GITHUB_OUTPUT
-          echo "high_cognit=$high_cognit" >> $GITHUB_OUTPUT
-          echo "dupl_count=$dupl_count" >> $GITHUB_OUTPUT
-
-          # Generate markdown reports
+          # Generate detailed reports
           echo "# Cyclomatic Complexity Report" > cyclo_report.md
           echo "" >> cyclo_report.md
           echo "**Total Functions**: $total_funcs" >> cyclo_report.md
-          echo "**High Complexity (>15)**: $high_complexity" >> cyclo_report.md
+          echo "**High Complexity (>15)**: $total_high_complexity" >> cyclo_report.md
           echo "" >> cyclo_report.md
           echo "### Top 10 Most Complex Functions" >> cyclo_report.md
           echo "\`\`\`" >> cyclo_report.md
-          sed -n '/📊 Cyclomatic Complexity:/,/^$/p' quality_output.txt | tail -n +3 | head -10 >> cyclo_report.md
+          sed -n '/📊 Cyclomatic Complexity:/,/^$/p' quality_output.txt | tail -n +3 | head -10 >> cyclo_report.md 2>/dev/null || echo "No high complexity functions" >> cyclo_report.md
           echo "\`\`\`" >> cyclo_report.md
 
           echo "# Cognitive Complexity Report" > cognit_report.md
           echo "" >> cognit_report.md
           echo "**Total Functions**: $total_funcs" >> cognit_report.md
-          echo "**High Cognitive Complexity (>20)**: $high_cognit" >> cognit_report.md
+          echo "**High Cognitive Complexity (>20)**: $total_high_cognit" >> cognit_report.md
           echo "" >> cognit_report.md
           echo "### Top 10 Functions (Cognitive)" >> cognit_report.md
           echo "\`\`\`" >> cognit_report.md
-          sed -n '/🧠 Cognitive Complexity:/,/^$/p' quality_output.txt | tail -n +3 | head -10 >> cognit_report.md
+          sed -n '/🧠 Cognitive Complexity:/,/^$/p' quality_output.txt | tail -n +3 | head -10 >> cognit_report.md 2>/dev/null || echo "No high cognitive complexity functions" >> cognit_report.md
           echo "\`\`\`" >> cognit_report.md
 
           echo "# Code Duplication Report" > dupl_report.md
           echo "" >> dupl_report.md
-          if [ "$dupl_count" -eq 0 ]; then
+          if [ "$total_dupl_count" -eq 0 ]; then
             echo "✅ **No significant code duplication detected** (threshold: 50 tokens)" >> dupl_report.md
           else
-            echo "⚠️ **Found $dupl_count clone groups of duplicated code**" >> dupl_report.md
+            echo "⚠️ **Found $total_dupl_count clone groups of duplicated code**" >> dupl_report.md
             echo "" >> dupl_report.md
             echo "<details>" >> dupl_report.md
             echo "<summary>View Duplication Details</summary>" >> dupl_report.md
             echo "" >> dupl_report.md
             echo "\`\`\`" >> dupl_report.md
-            sed -n '/🔄 Code Duplication:/,$p' quality_output.txt | head -30 >> dupl_report.md
+            sed -n '/🔄 Code Duplication:/,$p' quality_output.txt | head -30 >> dupl_report.md 2>/dev/null || echo "See module details" >> dupl_report.md
             echo "\`\`\`" >> dupl_report.md
             echo "</details>" >> dupl_report.md
           fi
 
-          echo "dupl_count=$dupl_count" >> $GITHUB_OUTPUT
+          # Export metrics
+          echo "total_funcs=$total_funcs" >> $GITHUB_OUTPUT
+          echo "high_complexity=$total_high_complexity" >> $GITHUB_OUTPUT
+          echo "high_cognit=$total_high_cognit" >> $GITHUB_OUTPUT
+          echo "dupl_count=$total_dupl_count" >> $GITHUB_OUTPUT
+          echo "module_count=$module_count" >> $GITHUB_OUTPUT
 
       - name: Generate Quality Score
         id: score
@@ -151,6 +243,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const moduleDetails = fs.readFileSync('module_details.md', 'utf8');
             const cycloReport = fs.readFileSync('cyclo_report.md', 'utf8');
             const cognitReport = fs.readFileSync('cognit_report.md', 'utf8');
             const duplReport = fs.readFileSync('dupl_report.md', 'utf8');
@@ -159,6 +252,7 @@ jobs:
             const highComplexity = ${{ steps.quality.outputs.high_complexity }};
             const highCognit = ${{ steps.quality.outputs.high_cognit }};
             const duplCount = ${{ steps.quality.outputs.dupl_count }};
+            const moduleCount = ${{ steps.quality.outputs.module_count }};
             const qualityScore = ${{ steps.score.outputs.quality_score }};
             const grade = '${{ steps.score.outputs.grade }}';
             const emoji = '${{ steps.score.outputs.emoji }}';
@@ -168,13 +262,23 @@ jobs:
 
             const body = `## ${emoji} Code Quality Report - Grade ${grade} (${qualityScore}/100)
 
-            ### 📊 Metrics Summary
+            ### 📊 Overall Metrics Summary
 
             | Metric | Value | Threshold | Status |
             |--------|-------|-----------|--------|
+            | **Modules Analyzed** | ${moduleCount} | - | ℹ️ |
+            | **Total Functions** | ${totalFuncs} | - | ℹ️ |
             | **Cyclomatic Complexity** | ${highComplexity}/${totalFuncs} (${complexityPercent}%) | ≤15 | ${highComplexity === 0 ? '✅' : '⚠️'} |
             | **Cognitive Complexity** | ${highCognit}/${totalFuncs} (${cognitPercent}%) | ≤20 | ${highCognit === 0 ? '✅' : '⚠️'} |
             | **Code Duplication** | ${duplCount} instances | 0 | ${duplCount === 0 ? '✅' : '⚠️'} |
+
+            ---
+
+            ### 📦 Per-Module Quality Metrics
+
+            ${moduleDetails}
+
+            <sub>Grade Scale: A (90+) 🎉 | B (80-89) ✅ | C (70-79) ⚠️ | D (60-69) ⚠️ | F (<60) ❌</sub>
 
             ---
 
@@ -201,7 +305,7 @@ jobs:
 
             ---
 
-            <sub>Quality Score: Based on complexity ratios and duplication. Target: A grade (90+)</sub>`;
+            <sub>Quality Score: Based on complexity ratios and duplication across all modules. Target: Grade A (90+)</sub>`;
 
             // Find existing comment
             const comments = await github.rest.issues.listComments({
