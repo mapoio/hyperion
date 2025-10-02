@@ -46,6 +46,7 @@ jobs:
             grpc
             docs
             ci
+            deps
           requireScope: false
 
   # Check for large files
@@ -104,15 +105,23 @@ jobs:
 
       - name: Run tests with coverage (monorepo)
         run: |
+          # Discover all modules dynamically from go.work
+          modules=$(go list -m -f '{{.Dir}}' | sed "s|$(pwd)/||")
+
           # Run tests for all modules and aggregate coverage
           total_coverage=0
           module_count=0
-          for module in hyperion adapter/viper; do
-            if [ -d "$module" ]; then
+
+          for module in $modules; do
+            if [ -d "$module" ] && [ -f "$module/go.mod" ]; then
               echo "Testing $module..."
-              (cd $module && go test -v -coverprofile=coverage.out -covermode=atomic ./...)
+              (cd "$module" && go test -v -coverprofile=coverage.out -covermode=atomic ./...) || {
+                echo "Tests failed for $module"
+                exit 1
+              }
+
               if [ -f "$module/coverage.out" ]; then
-                coverage=$(cd $module && go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+                coverage=$(cd "$module" && go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
                 echo "$module coverage: $coverage%"
                 total_coverage=$(echo "$total_coverage + $coverage" | bc)
                 module_count=$((module_count + 1))
