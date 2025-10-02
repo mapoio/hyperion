@@ -117,12 +117,23 @@ func NewGormUnitOfWork(db hyperion.Database) hyperion.UnitOfWork {
 // Uses mergo for clean struct merging, with special handling for boolean pointers.
 func loadConfig(src hyperion.Config, dst *Config) error {
 	// Load prefixed configuration (database.*)
+	// Only load if the key exists to avoid unnecessary errors
 	var prefixed Config
-	_ = src.Unmarshal("database", &prefixed)
+	if src.IsSet("database") {
+		if err := src.Unmarshal("database", &prefixed); err != nil {
+			return fmt.Errorf("failed to unmarshal database config: %w", err)
+		}
+	}
 
 	// Load root-level configuration (driver, host, etc.)
+	// Try to unmarshal root-level config. Check for presence of typical root keys first.
 	var root Config
-	_ = src.Unmarshal("", &root)
+	hasRootConfig := src.IsSet("driver") || src.IsSet("host") || src.IsSet("port")
+	if hasRootConfig {
+		if err := src.Unmarshal("", &root); err != nil {
+			return fmt.Errorf("failed to unmarshal root config: %w", err)
+		}
+	}
 
 	// Merge configurations: root overrides prefixed
 	// mergo.WithOverride allows root values to override prefixed values

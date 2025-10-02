@@ -1,6 +1,8 @@
 package gorm
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -751,4 +753,106 @@ func TestLoadConfig_BooleanRootLevelFalse(t *testing.T) {
 	if dbConfig.PrepareStmt == nil || *dbConfig.PrepareStmt {
 		t.Errorf("PrepareStmt = %v, want false (root level explicit)", dbConfig.PrepareStmt)
 	}
+}
+
+func TestLoadConfig_UnmarshalError(t *testing.T) {
+	// Test that unmarshal errors are properly surfaced
+	// This addresses Codex P1: configuration unmarshal errors should not be silently ignored
+
+	// Mock config that returns error on Unmarshal
+	cfg := &errorMockConfig{
+		shouldError: true,
+		data: map[string]any{
+			"database": map[string]any{
+				"driver":   DriverSQLite,
+				"database": ":memory:",
+			},
+		},
+	}
+
+	dbConfig := DefaultConfig()
+	err := loadConfig(cfg, dbConfig)
+
+	if err == nil {
+		t.Error("loadConfig() should return error when Unmarshal fails")
+	}
+
+	if err != nil && !strings.Contains(err.Error(), "failed to unmarshal") {
+		t.Errorf("Expected error message to contain 'failed to unmarshal', got: %v", err)
+	}
+}
+
+// errorMockConfig is a mock that can simulate Unmarshal errors
+type errorMockConfig struct {
+	shouldError bool
+	data        map[string]any
+}
+
+func (m *errorMockConfig) Get(key string) any {
+	return m.data[key]
+}
+
+func (m *errorMockConfig) GetString(key string) string {
+	if v, ok := m.data[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func (m *errorMockConfig) GetInt(key string) int {
+	if v, ok := m.data[key].(int); ok {
+		return v
+	}
+	return 0
+}
+
+func (m *errorMockConfig) GetInt64(key string) int64 {
+	if v, ok := m.data[key].(int64); ok {
+		return v
+	}
+	if v, ok := m.data[key].(int); ok {
+		return int64(v)
+	}
+	return 0
+}
+
+func (m *errorMockConfig) GetBool(key string) bool {
+	if v, ok := m.data[key].(bool); ok {
+		return v
+	}
+	return false
+}
+
+func (m *errorMockConfig) GetFloat64(key string) float64 {
+	if v, ok := m.data[key].(float64); ok {
+		return v
+	}
+	return 0
+}
+
+func (m *errorMockConfig) GetStringSlice(key string) []string {
+	if v, ok := m.data[key].([]string); ok {
+		return v
+	}
+	return nil
+}
+
+func (m *errorMockConfig) IsSet(key string) bool {
+	_, ok := m.data[key]
+	return ok
+}
+
+func (m *errorMockConfig) AllKeys() []string {
+	keys := make([]string, 0, len(m.data))
+	for k := range m.data {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func (m *errorMockConfig) Unmarshal(key string, v any) error {
+	if m.shouldError {
+		return fmt.Errorf("simulated unmarshal error for key: %s", key)
+	}
+	return nil
 }
