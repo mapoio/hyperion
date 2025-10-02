@@ -34,7 +34,7 @@ features:
     - alpha
     - beta
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -79,7 +79,7 @@ features:
     - alpha
     - beta
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -152,7 +152,7 @@ database:
   host: localhost
   port: 5432
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -193,7 +193,7 @@ func TestProviderWatch(t *testing.T) {
 app:
   name: initial
 `
-	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0o644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -223,7 +223,7 @@ app:
 	// Give watcher time to start
 	time.Sleep(100 * time.Millisecond)
 
-	if err := os.WriteFile(configPath, []byte(updatedConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(updatedConfig), 0o644); err != nil {
 		t.Fatalf("Failed to update config: %v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestProviderWatchMultipleCallbacks(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	initialConfig := `value: 1`
-	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0o644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -290,7 +290,7 @@ func TestProviderWatchMultipleCallbacks(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Modify config
-	if err := os.WriteFile(configPath, []byte("value: 2"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("value: 2"), 0o644); err != nil {
 		t.Fatalf("Failed to update config: %v", err)
 	}
 
@@ -322,14 +322,14 @@ func TestNewProviderFromEnv(t *testing.T) {
 	// Create a temporary config file in the default location
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "configs")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatalf("Failed to create config dir: %v", err)
 	}
 
 	configPath := filepath.Join(configDir, "config.yaml")
 	configContent := `app:
   name: env-test`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to create config: %v", err)
 	}
 
@@ -365,7 +365,7 @@ func TestProviderWatchAtomicWrite(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	initialConfig := `value: 1`
-	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0o644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -392,7 +392,7 @@ func TestProviderWatchAtomicWrite(t *testing.T) {
 	// Simulate atomic write: write to temp file then rename
 	tmpFile := filepath.Join(tmpDir, "config.yaml.tmp")
 	updatedConfig := `value: 2`
-	if err := os.WriteFile(tmpFile, []byte(updatedConfig), 0644); err != nil {
+	if err := os.WriteFile(tmpFile, []byte(updatedConfig), 0o644); err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
 
@@ -421,7 +421,7 @@ func TestProviderWatchStop(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
-	if err := os.WriteFile(configPath, []byte("value: 1"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("value: 1"), 0o644); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -449,7 +449,7 @@ func TestProviderWatchStop(t *testing.T) {
 
 	// Modify config after stopping
 	time.Sleep(100 * time.Millisecond)
-	if err := os.WriteFile(configPath, []byte("value: 2"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("value: 2"), 0o644); err != nil {
 		t.Fatalf("Failed to update config: %v", err)
 	}
 
