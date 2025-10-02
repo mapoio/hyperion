@@ -203,6 +203,103 @@ vuln-check: ## Check for vulnerable dependencies (matches CI)
 	done
 	@echo "✓ Vulnerability check complete"
 
+.PHONY: quality-tools
+quality-tools: ## Install code quality tools
+	@echo "Installing code quality tools..."
+	@command -v gocyclo >/dev/null 2>&1 || (echo "Installing gocyclo..." && go install github.com/fzipp/gocyclo/cmd/gocyclo@latest)
+	@command -v gocognit >/dev/null 2>&1 || (echo "Installing gocognit..." && go install github.com/uudashr/gocognit/cmd/gocognit@latest)
+	@command -v dupl >/dev/null 2>&1 || (echo "Installing dupl..." && go install github.com/mibk/dupl@latest)
+	@echo "✓ Code quality tools installed"
+
+.PHONY: check-cyclo
+check-cyclo: ## Check cyclomatic complexity (threshold: 15, matches CI)
+	@echo "Checking cyclomatic complexity..."
+	@command -v gocyclo >/dev/null 2>&1 || (echo "Installing gocyclo..." && go install github.com/fzipp/gocyclo/cmd/gocyclo@latest)
+	@total_funcs=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	high_complexity=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 15 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	echo "Total functions: $$total_funcs"; \
+	echo "High complexity (>15): $$high_complexity"; \
+	if [ $$high_complexity -gt 0 ]; then \
+		echo "❌ Found $$high_complexity functions with cyclomatic complexity > 15:"; \
+		find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 15 {} \; 2>/dev/null; \
+		exit 1; \
+	else \
+		echo "✓ All functions meet cyclomatic complexity threshold"; \
+	fi
+
+.PHONY: check-cognit
+check-cognit: ## Check cognitive complexity (threshold: 20, matches CI)
+	@echo "Checking cognitive complexity..."
+	@command -v gocognit >/dev/null 2>&1 || (echo "Installing gocognit..." && go install github.com/uudashr/gocognit/cmd/gocognit@latest)
+	@total_funcs=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	high_cognit=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 20 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	echo "Total functions: $$total_funcs"; \
+	echo "High cognitive complexity (>20): $$high_cognit"; \
+	if [ $$high_cognit -gt 0 ]; then \
+		echo "❌ Found $$high_cognit functions with cognitive complexity > 20:"; \
+		find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 20 {} \; 2>/dev/null; \
+		exit 1; \
+	else \
+		echo "✓ All functions meet cognitive complexity threshold"; \
+	fi
+
+.PHONY: check-dupl
+check-dupl: ## Check code duplication (threshold: 50 tokens, matches CI)
+	@echo "Checking code duplication..."
+	@command -v dupl >/dev/null 2>&1 || (echo "Installing dupl..." && go install github.com/mibk/dupl@latest)
+	@dupl_output=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" | xargs dupl -threshold 50 2>/dev/null || echo ""); \
+	if echo "$$dupl_output" | grep -q "Found total 0 clone groups"; then \
+		echo "✓ No significant code duplication detected (threshold: 50 tokens)"; \
+	elif [ -n "$$dupl_output" ] && ! echo "$$dupl_output" | grep -q "Found total 0 clone groups"; then \
+		dupl_count=$$(echo "$$dupl_output" | grep -oE 'Found total [0-9]+' | grep -oE '[0-9]+' || echo 0); \
+		echo "❌ Found $$dupl_count clone groups of duplicated code:"; \
+		echo "$$dupl_output" | head -50; \
+		exit 1; \
+	else \
+		echo "✓ No significant code duplication detected (threshold: 50 tokens)"; \
+	fi
+
+.PHONY: quality
+quality: check-cyclo check-cognit check-dupl ## Run all code quality checks (matches CI)
+	@echo "✓ All code quality checks passed"
+
+.PHONY: quality-report
+quality-report: ## Generate detailed code quality report (matches CI)
+	@echo "==================== Code Quality Report ===================="
+	@echo ""
+	@echo "📊 Cyclomatic Complexity:"
+	@command -v gocyclo >/dev/null 2>&1 || go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+	@total_funcs=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	high_complexity=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 15 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	echo "  Total functions: $$total_funcs"; \
+	echo "  High complexity (>15): $$high_complexity"; \
+	echo "  Top 10 most complex:"; \
+	find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocyclo -over 0 {} \; 2>/dev/null | sort -rn | head -10 | sed 's/^/    /' || echo "    No functions found"
+	@echo ""
+	@echo "🧠 Cognitive Complexity:"
+	@command -v gocognit >/dev/null 2>&1 || go install github.com/uudashr/gocognit/cmd/gocognit@latest
+	@total_funcs=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	high_cognit=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 20 {} \; 2>/dev/null | wc -l | tr -d ' '); \
+	echo "  Total functions: $$total_funcs"; \
+	echo "  High cognitive complexity (>20): $$high_cognit"; \
+	echo "  Top 10 most complex:"; \
+	find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" -exec gocognit -over 0 {} \; 2>/dev/null | sort -rn | head -10 | sed 's/^/    /' || echo "    No functions found"
+	@echo ""
+	@echo "🔄 Code Duplication:"
+	@command -v dupl >/dev/null 2>&1 || go install github.com/mibk/dupl@latest
+	@dupl_output=$$(find ./hyperion ./adapter -name "*.go" -not -name "*_test.go" | xargs dupl -threshold 50 2>/dev/null || echo ""); \
+	if echo "$$dupl_output" | grep -q "Found total 0 clone groups"; then \
+		echo "  ✓ No significant code duplication detected (threshold: 50 tokens)"; \
+	elif [ -n "$$dupl_output" ] && ! echo "$$dupl_output" | grep -q "Found total 0 clone groups"; then \
+		dupl_count=$$(echo "$$dupl_output" | grep -oE 'Found total [0-9]+' | grep -oE '[0-9]+' || echo 0); \
+		echo "  ⚠️  Found $$dupl_count clone groups"; \
+		echo "$$dupl_output" | head -30 | sed 's/^/    /'; \
+	else \
+		echo "  ✓ No significant code duplication detected (threshold: 50 tokens)"; \
+	fi
+	@echo ""
+	@echo "=============================================================="
+
 .PHONY: ci
-ci: deps check-format lint test check-coverage build security ## Run complete CI pipeline locally (matches GitHub Actions)
+ci: deps check-format lint test check-coverage build security quality ## Run complete CI pipeline locally (matches GitHub Actions)
 	@echo "✓ CI pipeline completed successfully"
