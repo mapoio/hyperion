@@ -81,11 +81,9 @@ jobs:
             echo "<summary>View Duplication Details</summary>" >> dupl_report.md
             echo "" >> dupl_report.md
             echo "\`\`\`" >> dupl_report.md
-            echo "$dupl_output" | head -50 >> dupl_report.md
+            sed -n '/🔄 Code Duplication:/,$p' quality_output.txt | head -30 >> dupl_report.md
             echo "\`\`\`" >> dupl_report.md
             echo "</details>" >> dupl_report.md
-          else
-            echo "✅ **No significant code duplication detected** (threshold: 50 tokens)" >> dupl_report.md
           fi
 
           echo "dupl_count=$dupl_count" >> $GITHUB_OUTPUT
@@ -93,10 +91,10 @@ jobs:
       - name: Generate Quality Score
         id: score
         run: |
-          total_funcs=${{ steps.cyclo.outputs.total_funcs }}
-          high_complexity=${{ steps.cyclo.outputs.high_complexity }}
-          high_cognit=${{ steps.cognit.outputs.high_cognit }}
-          dupl_count=${{ steps.dupl.outputs.dupl_count }}
+          total_funcs=${{ steps.quality.outputs.total_funcs }}
+          high_complexity=${{ steps.quality.outputs.high_complexity }}
+          high_cognit=${{ steps.quality.outputs.high_cognit }}
+          dupl_count=${{ steps.quality.outputs.dupl_count }}
 
           # Calculate quality score (0-100)
           # Start with 100, deduct points for issues
