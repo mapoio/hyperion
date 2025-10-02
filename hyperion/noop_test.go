@@ -50,14 +50,14 @@ func TestNoOpLogger(t *testing.T) {
 // TestLogLevel tests LogLevel string conversion
 func TestLogLevel(t *testing.T) {
 	tests := []struct {
-		level    hyperion.LogLevel
 		expected string
+		level    hyperion.LogLevel
 	}{
-		{hyperion.DebugLevel, "debug"},
-		{hyperion.InfoLevel, "info"},
-		{hyperion.WarnLevel, "warn"},
-		{hyperion.ErrorLevel, "error"},
-		{hyperion.FatalLevel, "fatal"},
+		{"debug", hyperion.DebugLevel},
+		{"info", hyperion.InfoLevel},
+		{"warn", hyperion.WarnLevel},
+		{"error", hyperion.ErrorLevel},
+		{"fatal", hyperion.FatalLevel},
 	}
 
 	for _, tt := range tests {
@@ -279,13 +279,13 @@ func TestNoOpCache(t *testing.T) {
 	}
 
 	// Test Set
-	if err := cache.Set(ctx, "key", []byte("value"), time.Minute); err != nil {
-		t.Errorf("Set should not error, got %v", err)
+	if setErr := cache.Set(ctx, "key", []byte("value"), time.Minute); setErr != nil {
+		t.Errorf("Set should not error, got %v", setErr)
 	}
 
 	// Test Delete
-	if err := cache.Delete(ctx, "key"); err != nil {
-		t.Errorf("Delete should not error, got %v", err)
+	if delErr := cache.Delete(ctx, "key"); delErr != nil {
+		t.Errorf("Delete should not error, got %v", delErr)
 	}
 
 	// Test Exists
