@@ -105,15 +105,81 @@ func NewGormUnitOfWork(db hyperion.Database) hyperion.UnitOfWork {
 	return &gormUnitOfWork{db: gdb.db}
 }
 
-// loadConfig loads configuration from hyperion.Config into Config struct.
+// loadConfig loads configuration from hyperion.Config and merges with defaults.
+// It unmarshals into a temporary struct to preserve default values for unset fields.
 func loadConfig(src hyperion.Config, dst *Config) error {
+	// Unmarshal into temporary struct to avoid overwriting defaults
+	var temp Config
+
 	// Try loading with "database" prefix
-	if err := src.Unmarshal("database", dst); err != nil {
+	err := src.Unmarshal("database", &temp)
+	if err != nil {
 		// If that fails, try without prefix (root level)
-		if err := src.Unmarshal("", dst); err != nil {
-			return fmt.Errorf("failed to unmarshal config: %w", err)
+		if err := src.Unmarshal("", &temp); err != nil {
+			// If both fail, keep the defaults (dst is already initialized with defaults)
+			return nil
 		}
 	}
+
+	// Merge non-zero values from temp into dst, preserving defaults
+	if temp.Driver != "" {
+		dst.Driver = temp.Driver
+	}
+	if temp.Host != "" {
+		dst.Host = temp.Host
+	}
+	if temp.Port != 0 {
+		dst.Port = temp.Port
+	}
+	if temp.Username != "" {
+		dst.Username = temp.Username
+	}
+	if temp.Password != "" {
+		dst.Password = temp.Password
+	}
+	if temp.Database != "" {
+		dst.Database = temp.Database
+	}
+	if temp.DSN != "" {
+		dst.DSN = temp.DSN
+	}
+	if temp.SSLMode != "" {
+		dst.SSLMode = temp.SSLMode
+	}
+	if temp.Charset != "" {
+		dst.Charset = temp.Charset
+	}
+	if temp.MaxOpenConns != 0 {
+		dst.MaxOpenConns = temp.MaxOpenConns
+	}
+	if temp.MaxIdleConns != 0 {
+		dst.MaxIdleConns = temp.MaxIdleConns
+	}
+	if temp.ConnMaxLifetime != 0 {
+		dst.ConnMaxLifetime = temp.ConnMaxLifetime
+	}
+	if temp.ConnMaxIdleTime != 0 {
+		dst.ConnMaxIdleTime = temp.ConnMaxIdleTime
+	}
+	if temp.SlowThreshold != 0 {
+		dst.SlowThreshold = temp.SlowThreshold
+	}
+	if temp.LogLevel != "" {
+		dst.LogLevel = temp.LogLevel
+	}
+
+	// Boolean fields - only override if explicitly set to true
+	// (since false is the zero value, we can't distinguish between unset and false)
+	if temp.SkipDefaultTransaction {
+		dst.SkipDefaultTransaction = temp.SkipDefaultTransaction
+	}
+	if temp.PrepareStmt {
+		dst.PrepareStmt = temp.PrepareStmt
+	}
+	if temp.AutoMigrate {
+		dst.AutoMigrate = temp.AutoMigrate
+	}
+
 	return nil
 }
 

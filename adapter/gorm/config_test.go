@@ -411,3 +411,110 @@ func TestLoadConfig_Fallback(t *testing.T) {
 		t.Errorf("MaxOpenConns = %d, want 30", dbConfig.MaxOpenConns)
 	}
 }
+
+func TestLoadConfig_PreservesDefaults(t *testing.T) {
+	// Test that defaults are preserved when config file has no database section
+	// This addresses Codex P1 issue: Viper/mapstructure zeroes the destination struct
+	cfg := &mockConfig{
+		data: map[string]any{
+			"app": map[string]any{
+				"name": "myapp",
+			},
+		},
+	}
+
+	// Start with defaults
+	dbConfig := DefaultConfig()
+
+	// Load config (should preserve defaults since no database section)
+	err := loadConfig(cfg, dbConfig)
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	// Verify defaults are preserved
+	if dbConfig.Driver != DriverSQLite {
+		t.Errorf("Driver = %s, want %s", dbConfig.Driver, DriverSQLite)
+	}
+
+	if dbConfig.Port != 5432 {
+		t.Errorf("Port = %d, want 5432", dbConfig.Port)
+	}
+
+	if dbConfig.MaxOpenConns != 25 {
+		t.Errorf("MaxOpenConns = %d, want 25", dbConfig.MaxOpenConns)
+	}
+
+	if dbConfig.MaxIdleConns != 5 {
+		t.Errorf("MaxIdleConns = %d, want 5", dbConfig.MaxIdleConns)
+	}
+
+	if dbConfig.ConnMaxLifetime != 5*time.Minute {
+		t.Errorf("ConnMaxLifetime = %v, want 5m", dbConfig.ConnMaxLifetime)
+	}
+
+	if dbConfig.ConnMaxIdleTime != 10*time.Minute {
+		t.Errorf("ConnMaxIdleTime = %v, want 10m", dbConfig.ConnMaxIdleTime)
+	}
+
+	if dbConfig.LogLevel != "warn" {
+		t.Errorf("LogLevel = %s, want warn", dbConfig.LogLevel)
+	}
+
+	if dbConfig.PrepareStmt != true {
+		t.Errorf("PrepareStmt = %v, want true", dbConfig.PrepareStmt)
+	}
+
+	if dbConfig.Database != "hyperion.db" {
+		t.Errorf("Database = %s, want hyperion.db", dbConfig.Database)
+	}
+}
+
+func TestLoadConfig_PartialOverride(t *testing.T) {
+	// Test that only provided values are overridden, rest preserved
+	cfg := &mockConfig{
+		data: map[string]any{
+			"database": map[string]any{
+				"driver":         DriverPostgres,
+				"host":           "customhost",
+				"max_open_conns": 100,
+				// Other fields not provided - should keep defaults
+			},
+		},
+	}
+
+	// Start with defaults
+	dbConfig := DefaultConfig()
+
+	// Load config
+	err := loadConfig(cfg, dbConfig)
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	// Verify overridden values
+	if dbConfig.Driver != DriverPostgres {
+		t.Errorf("Driver = %s, want %s", dbConfig.Driver, DriverPostgres)
+	}
+
+	if dbConfig.Host != "customhost" {
+		t.Errorf("Host = %s, want customhost", dbConfig.Host)
+	}
+
+	if dbConfig.MaxOpenConns != 100 {
+		t.Errorf("MaxOpenConns = %d, want 100", dbConfig.MaxOpenConns)
+	}
+
+	// Verify preserved defaults
+	if dbConfig.Port != 5432 {
+		t.Errorf("Port = %d, want 5432 (default)", dbConfig.Port)
+	}
+
+	if dbConfig.MaxIdleConns != 5 {
+		t.Errorf("MaxIdleConns = %d, want 5 (default)", dbConfig.MaxIdleConns)
+	}
+
+	if dbConfig.LogLevel != "warn" {
+		t.Errorf("LogLevel = %s, want warn (default)", dbConfig.LogLevel)
+	}
+}
