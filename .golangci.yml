@@ -69,6 +69,8 @@ linters-settings:
 
   govet:
     enable-all: true
+    disable:
+      - fieldalignment  # Disabled globally, memory layout optimization not critical
     settings:
       shadow:
         strict: false
@@ -162,6 +164,7 @@ issues:
         - gosec
         - gocognit
         - bodyclose
+        - fieldalignment  # Test structs don't need memory optimization
 
     # Exclude some linters from mock files
     - path: 'mock_.*\.go'
