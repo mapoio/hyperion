@@ -3,6 +3,7 @@ package gorm
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/mapoio/hyperion"
 )
@@ -110,11 +111,41 @@ func (m *mockConfig) Unmarshal(key string, v any) error {
 		if password, ok := dbData["password"].(string); ok {
 			cfg.Password = password
 		}
+		if dsn, ok := dbData["dsn"].(string); ok {
+			cfg.DSN = dsn
+		}
+		if sslmode, ok := dbData["sslmode"].(string); ok {
+			cfg.SSLMode = sslmode
+		}
+		if charset, ok := dbData["charset"].(string); ok {
+			cfg.Charset = charset
+		}
 		if maxOpenConns, ok := dbData["max_open_conns"].(int); ok {
 			cfg.MaxOpenConns = maxOpenConns
 		}
 		if maxIdleConns, ok := dbData["max_idle_conns"].(int); ok {
 			cfg.MaxIdleConns = maxIdleConns
+		}
+		if connMaxLifetime, ok := dbData["conn_max_lifetime"].(int64); ok {
+			cfg.ConnMaxLifetime = time.Duration(connMaxLifetime)
+		}
+		if connMaxIdleTime, ok := dbData["conn_max_idle_time"].(int64); ok {
+			cfg.ConnMaxIdleTime = time.Duration(connMaxIdleTime)
+		}
+		if slowThreshold, ok := dbData["slow_threshold"].(int64); ok {
+			cfg.SlowThreshold = time.Duration(slowThreshold)
+		}
+		if logLevel, ok := dbData["log_level"].(string); ok {
+			cfg.LogLevel = logLevel
+		}
+		if skipDefaultTransaction, ok := dbData["skip_default_transaction"].(bool); ok {
+			cfg.SkipDefaultTransaction = skipDefaultTransaction
+		}
+		if prepareStmt, ok := dbData["prepare_stmt"].(bool); ok {
+			cfg.PrepareStmt = prepareStmt
+		}
+		if autoMigrate, ok := dbData["auto_migrate"].(bool); ok {
+			cfg.AutoMigrate = autoMigrate
 		}
 	}
 	return nil

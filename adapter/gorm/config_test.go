@@ -583,13 +583,30 @@ func TestLoadConfig_RootOverridesPrefixed(t *testing.T) {
 	cfg := &mockConfig{
 		data: map[string]any{
 			"database": map[string]any{
-				"driver": DriverSQLite,
-				"host":   "prefixedhost",
-				"port":   5432,
+				"driver":                  DriverSQLite,
+				"host":                    "prefixedhost",
+				"port":                    5432,
+				"username":                "prefixuser",
+				"password":                "prefixpass",
+				"database":                "prefixdb",
+				"dsn":                     "prefixdsn",
+				"sslmode":                 "disable",
+				"charset":                 "utf8",
+				"max_open_conns":          10,
+				"max_idle_conns":          2,
+				"conn_max_lifetime":       int64(1 * time.Second),
+				"conn_max_idle_time":      int64(2 * time.Second),
+				"slow_threshold":          int64(100 * time.Millisecond),
+				"log_level":               "error",
+				"skip_default_transaction": true,
+				"prepare_stmt":            false,
+				"auto_migrate":            false,
 			},
 			// Root-level values should override prefixed ones
-			"driver": DriverMySQL,
-			"port":   3306,
+			"driver":   DriverMySQL,
+			"port":     3306,
+			"username": "rootuser",
+			"charset":  "utf8mb4",
 		},
 	}
 
@@ -611,8 +628,60 @@ func TestLoadConfig_RootOverridesPrefixed(t *testing.T) {
 		t.Errorf("Port = %d, want 3306 (root should override prefixed)", dbConfig.Port)
 	}
 
+	if dbConfig.Username != "rootuser" {
+		t.Errorf("Username = %s, want rootuser (root should override prefixed)", dbConfig.Username)
+	}
+
+	if dbConfig.Charset != "utf8mb4" {
+		t.Errorf("Charset = %s, want utf8mb4 (root should override prefixed)", dbConfig.Charset)
+	}
+
 	// Verify prefixed values are used when root doesn't override
 	if dbConfig.Host != "prefixedhost" {
 		t.Errorf("Host = %s, want prefixedhost (from prefixed)", dbConfig.Host)
+	}
+
+	if dbConfig.Password != "prefixpass" {
+		t.Errorf("Password = %s, want prefixpass (from prefixed)", dbConfig.Password)
+	}
+
+	if dbConfig.Database != "prefixdb" {
+		t.Errorf("Database = %s, want prefixdb (from prefixed)", dbConfig.Database)
+	}
+
+	if dbConfig.DSN != "prefixdsn" {
+		t.Errorf("DSN = %s, want prefixdsn (from prefixed)", dbConfig.DSN)
+	}
+
+	if dbConfig.SSLMode != "disable" {
+		t.Errorf("SSLMode = %s, want disable (from prefixed)", dbConfig.SSLMode)
+	}
+
+	if dbConfig.MaxOpenConns != 10 {
+		t.Errorf("MaxOpenConns = %d, want 10 (from prefixed)", dbConfig.MaxOpenConns)
+	}
+
+	if dbConfig.MaxIdleConns != 2 {
+		t.Errorf("MaxIdleConns = %d, want 2 (from prefixed)", dbConfig.MaxIdleConns)
+	}
+
+	if dbConfig.ConnMaxLifetime != 1000000000 {
+		t.Errorf("ConnMaxLifetime = %v, want 1s (from prefixed)", dbConfig.ConnMaxLifetime)
+	}
+
+	if dbConfig.ConnMaxIdleTime != 2000000000 {
+		t.Errorf("ConnMaxIdleTime = %v, want 2s (from prefixed)", dbConfig.ConnMaxIdleTime)
+	}
+
+	if dbConfig.SlowThreshold != 100000000 {
+		t.Errorf("SlowThreshold = %v, want 100ms (from prefixed)", dbConfig.SlowThreshold)
+	}
+
+	if dbConfig.LogLevel != "error" {
+		t.Errorf("LogLevel = %s, want error (from prefixed)", dbConfig.LogLevel)
+	}
+
+	if dbConfig.SkipDefaultTransaction != true {
+		t.Errorf("SkipDefaultTransaction = %v, want true (from prefixed)", dbConfig.SkipDefaultTransaction)
 	}
 }
