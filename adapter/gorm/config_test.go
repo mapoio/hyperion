@@ -730,8 +730,8 @@ func TestLoadConfig_BooleanRootLevelFalse(t *testing.T) {
 	// Test that root-level boolean fields can be set to false
 	cfg := &mockConfig{
 		data: map[string]any{
-			"driver":      DriverSQLite,
-			"database":    ":memory:",
+			"driver":       DriverSQLite,
+			"database":     ":memory:",
 			"prepare_stmt": false, // Root level explicit false
 		},
 	}
