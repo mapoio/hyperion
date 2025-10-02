@@ -108,62 +108,157 @@ jobs:
           # Discover all modules dynamically from go.work
           modules=$(go list -m -f '{{.Dir}}' | sed "s|$(pwd)/||")
 
-          # Run tests for all modules and aggregate coverage
+          # Coverage threshold
+          THRESHOLD=80
+
+          # Initialize coverage tracking
           total_coverage=0
           module_count=0
+          failed_modules=""
+          all_passed=true
 
+          # Create coverage report file
+          echo "# Module Coverage Details" > coverage_details.md
+          echo "" >> coverage_details.md
+          echo "| Module | Coverage | Status |" >> coverage_details.md
+          echo "|--------|----------|--------|" >> coverage_details.md
+
+          # Test each module and collect coverage
           for module in $modules; do
             if [ -d "$module" ] && [ -f "$module/go.mod" ]; then
               echo "Testing $module..."
-              (cd "$module" && go test -v -coverprofile=coverage.out -covermode=atomic ./...) || {
-                echo "Tests failed for $module"
-                exit 1
-              }
 
-              if [ -f "$module/coverage.out" ]; then
-                coverage=$(cd "$module" && go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-                echo "$module coverage: $coverage%"
-                total_coverage=$(echo "$total_coverage + $coverage" | bc)
-                module_count=$((module_count + 1))
+              # Run tests with coverage
+              if (cd "$module" && go test -v -race -coverprofile=coverage.out -covermode=atomic ./...); then
+                if [ -f "$module/coverage.out" ]; then
+                  coverage=$(cd "$module" && go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+
+                  # Determine status emoji
+                  if (( $(echo "$coverage >= $THRESHOLD" | bc -l) )); then
+                    status="✅ PASS"
+                  else
+                    status="❌ FAIL"
+                    failed_modules="$failed_modules\n- $module: ${coverage}% (< ${THRESHOLD}%)"
+                    all_passed=false
+                  fi
+
+                  echo "| \`$module\` | ${coverage}% | $status |" >> coverage_details.md
+
+                  total_coverage=$(echo "$total_coverage + $coverage" | bc)
+                  module_count=$((module_count + 1))
+
+                  # Export module coverage as env var (sanitize module name)
+                  module_name=$(echo "$module" | tr '/' '_' | tr '-' '_')
+                  echo "coverage_${module_name}=$coverage" >> $GITHUB_ENV
+                else
+                  echo "| \`$module\` | N/A | ⚠️ No coverage data |" >> coverage_details.md
+                fi
+              else
+                echo "| \`$module\` | N/A | ❌ Tests failed |" >> coverage_details.md
+                all_passed=false
+                exit 1
               fi
             fi
           done
 
-          # Calculate average coverage
+          # Calculate overall average
           if [ $module_count -gt 0 ]; then
-            pr_coverage=$(echo "scale=2; $total_coverage / $module_count" | bc)
+            overall_coverage=$(echo "scale=2; $total_coverage / $module_count" | bc)
           else
-            pr_coverage=0
+            overall_coverage=0
           fi
 
-          echo "Average PR Coverage: $pr_coverage%"
-          echo "pr_coverage=$pr_coverage" >> $GITHUB_ENV
+          echo "overall_coverage=$overall_coverage" >> $GITHUB_ENV
+          echo "module_count=$module_count" >> $GITHUB_ENV
+          echo "all_passed=$all_passed" >> $GITHUB_ENV
+          echo "failed_modules=$failed_modules" >> $GITHUB_ENV
+          echo "threshold=$THRESHOLD" >> $GITHUB_ENV
 
       - name: Comment coverage on PR
         uses: actions/github-script@v7
         with:
           script: |
-            const coverage = process.env.pr_coverage;
-            const threshold = 80;
-            const emoji = coverage >= threshold ? '✅' : '⚠️';
+            const fs = require('fs');
+            const coverageDetails = fs.readFileSync('coverage_details.md', 'utf8');
 
-            const body = `## ${emoji} Test Coverage Report
+            const overallCoverage = parseFloat(process.env.overall_coverage);
+            const threshold = parseInt(process.env.threshold);
+            const moduleCount = parseInt(process.env.module_count);
+            const allPassed = process.env.all_passed === 'true';
+            const failedModules = process.env.failed_modules;
 
-            **Coverage**: ${coverage}%
+            const overallEmoji = overallCoverage >= threshold ? '✅' : '⚠️';
+            const statusEmoji = allPassed ? '✅' : '❌';
+
+            let body = `## ${statusEmoji} Test Coverage Report
+
+            ### 📊 Overall Coverage: ${overallCoverage.toFixed(2)}% ${overallEmoji}
+
             **Threshold**: ${threshold}%
-            **Status**: ${coverage >= threshold ? 'PASS' : 'BELOW THRESHOLD'}
+            **Modules Tested**: ${moduleCount}
+            **Status**: ${allPassed ? '✅ All modules meet threshold' : '❌ Some modules below threshold'}
 
-            ${coverage >= threshold ?
-              'Great job! Coverage meets the required threshold.' :
-              `⚠️ Coverage is below the ${threshold}% threshold. Please add more tests.`
-            }`;
+            ---
 
-            github.rest.issues.createComment({
+            ### Module Coverage Details
+
+            ${coverageDetails}
+
+            ---
+            `;
+
+            if (!allPassed && failedModules) {
+              body += `
+            ### ⚠️ Modules Below Threshold
+
+            The following modules need more test coverage:
+            ${failedModules}
+
+            Please add tests to bring these modules to at least ${threshold}% coverage.
+            `;
+            } else {
+              body += `
+            ### 🎉 Great Job!
+
+            All modules meet or exceed the ${threshold}% coverage threshold.
+            `;
+            }
+
+            body += `
+            <sub>Note: Each module must independently meet the ${threshold}% threshold.</sub>`;
+
+            // Find and update/create comment
+            const comments = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: body
             });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Test Coverage Report')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+            // Fail the check if any module is below threshold
+            if (!allPassed) {
+              core.setFailed(`Some modules have coverage below ${threshold}% threshold`);
+            }
 
   # Label based on changes
   auto-label:
