@@ -71,14 +71,14 @@ jobs:
       - name: Run golangci-lint (hyperion)
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.61
+          version: latest
           working-directory: hyperion
           args: --config=../.golangci.yml --timeout=10m
 
       - name: Run golangci-lint (adapter/viper)
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.61
+          version: latest
           working-directory: adapter/viper
           args: --config=../../.golangci.yml --timeout=10m
 
