@@ -155,10 +155,10 @@ jobs:
             const cognitReport = fs.readFileSync('cognit_report.md', 'utf8');
             const duplReport = fs.readFileSync('dupl_report.md', 'utf8');
 
-            const totalFuncs = ${{ steps.cyclo.outputs.total_funcs }};
-            const highComplexity = ${{ steps.cyclo.outputs.high_complexity }};
-            const highCognit = ${{ steps.cognit.outputs.high_cognit }};
-            const duplCount = ${{ steps.dupl.outputs.dupl_count }};
+            const totalFuncs = ${{ steps.quality.outputs.total_funcs }};
+            const highComplexity = ${{ steps.quality.outputs.high_complexity }};
+            const highCognit = ${{ steps.quality.outputs.high_cognit }};
+            const duplCount = ${{ steps.quality.outputs.dupl_count }};
             const qualityScore = ${{ steps.score.outputs.quality_score }};
             const grade = '${{ steps.score.outputs.grade }}';
             const emoji = '${{ steps.score.outputs.emoji }}';
