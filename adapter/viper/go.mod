@@ -6,7 +6,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/mapoio/hyperion v0.0.0
 	github.com/spf13/viper v1.21.0
-	go.uber.org/fx v1.22.2
+	go.uber.org/fx v1.24.0
 )
 
 require (
