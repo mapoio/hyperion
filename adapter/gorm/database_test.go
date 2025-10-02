@@ -82,12 +82,10 @@ func (m *mockConfig) Unmarshal(key string, v any) error {
 
 	var dbData map[string]any
 	if key == "" {
-		// Root level
-		if data, ok := m.data["database"].(map[string]any); ok {
-			dbData = data
-		}
+		// Root level - use entire data map directly
+		dbData = m.data
 	} else {
-		// Specific key
+		// Specific key - extract nested map
 		if data, ok := m.data[key].(map[string]any); ok {
 			dbData = data
 		}

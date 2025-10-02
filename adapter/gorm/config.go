@@ -107,19 +107,24 @@ func NewGormUnitOfWork(db hyperion.Database) hyperion.UnitOfWork {
 
 // loadConfig loads configuration from hyperion.Config and merges with defaults.
 // It unmarshals into a temporary struct to preserve default values for unset fields.
+// Tries loading from both "database" prefix and root level, merging both results.
 func loadConfig(src hyperion.Config, dst *Config) error {
 	// Unmarshal into temporary struct to avoid overwriting defaults
 	var temp Config
 
-	// Try loading with "database" prefix
-	err := src.Unmarshal("database", &temp)
-	if err != nil {
-		// If that fails, try without prefix (root level)
-		if err := src.Unmarshal("", &temp); err != nil {
-			// If both fail, keep the defaults (dst is already initialized with defaults)
-			return nil
-		}
-	}
+	// Try loading with "database" prefix first
+	// Note: Viper returns nil even when key doesn't exist, so we can't rely on error
+	_ = src.Unmarshal("database", &temp)
+
+	// Also try root level config (without prefix) to support both styles:
+	// 1. database.driver (prefixed)
+	// 2. driver (root level)
+	// Both are valid and will be merged (root level takes precedence if both exist)
+	var rootTemp Config
+	_ = src.Unmarshal("", &rootTemp)
+
+	// Merge root-level values into temp (root takes precedence over prefixed)
+	mergeConfigValues(&temp, &rootTemp)
 
 	// Merge non-zero values from temp into dst, preserving defaults
 	if temp.Driver != "" {
@@ -181,6 +186,65 @@ func loadConfig(src hyperion.Config, dst *Config) error {
 	}
 
 	return nil
+}
+
+// mergeConfigValues merges non-zero values from src into dst.
+// This allows root-level config to override prefixed config.
+func mergeConfigValues(dst, src *Config) {
+	if src.Driver != "" {
+		dst.Driver = src.Driver
+	}
+	if src.Host != "" {
+		dst.Host = src.Host
+	}
+	if src.Port != 0 {
+		dst.Port = src.Port
+	}
+	if src.Username != "" {
+		dst.Username = src.Username
+	}
+	if src.Password != "" {
+		dst.Password = src.Password
+	}
+	if src.Database != "" {
+		dst.Database = src.Database
+	}
+	if src.DSN != "" {
+		dst.DSN = src.DSN
+	}
+	if src.SSLMode != "" {
+		dst.SSLMode = src.SSLMode
+	}
+	if src.Charset != "" {
+		dst.Charset = src.Charset
+	}
+	if src.MaxOpenConns != 0 {
+		dst.MaxOpenConns = src.MaxOpenConns
+	}
+	if src.MaxIdleConns != 0 {
+		dst.MaxIdleConns = src.MaxIdleConns
+	}
+	if src.ConnMaxLifetime != 0 {
+		dst.ConnMaxLifetime = src.ConnMaxLifetime
+	}
+	if src.ConnMaxIdleTime != 0 {
+		dst.ConnMaxIdleTime = src.ConnMaxIdleTime
+	}
+	if src.SlowThreshold != 0 {
+		dst.SlowThreshold = src.SlowThreshold
+	}
+	if src.LogLevel != "" {
+		dst.LogLevel = src.LogLevel
+	}
+	if src.SkipDefaultTransaction {
+		dst.SkipDefaultTransaction = src.SkipDefaultTransaction
+	}
+	if src.PrepareStmt {
+		dst.PrepareStmt = src.PrepareStmt
+	}
+	if src.AutoMigrate {
+		dst.AutoMigrate = src.AutoMigrate
+	}
 }
 
 // Validate checks if the configuration is valid.

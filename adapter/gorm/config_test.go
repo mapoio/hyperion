@@ -518,3 +518,101 @@ func TestLoadConfig_PartialOverride(t *testing.T) {
 		t.Errorf("LogLevel = %s, want warn (default)", dbConfig.LogLevel)
 	}
 }
+
+func TestLoadConfig_RootLevel(t *testing.T) {
+	// Test root-level config (without "database" prefix)
+	// This addresses Codex P1 issue: root-level config was being ignored
+	cfg := &mockConfig{
+		data: map[string]any{
+			"driver":         DriverMySQL,
+			"host":           "roothost",
+			"port":           3306,
+			"username":       "rootuser",
+			"password":       "rootpass",
+			"database":       "rootdb",
+			"max_open_conns": 50,
+		},
+	}
+
+	// Start with defaults
+	dbConfig := DefaultConfig()
+
+	// Load config
+	err := loadConfig(cfg, dbConfig)
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	// Verify root-level values are loaded
+	if dbConfig.Driver != DriverMySQL {
+		t.Errorf("Driver = %s, want %s", dbConfig.Driver, DriverMySQL)
+	}
+
+	if dbConfig.Host != "roothost" {
+		t.Errorf("Host = %s, want roothost", dbConfig.Host)
+	}
+
+	if dbConfig.Port != 3306 {
+		t.Errorf("Port = %d, want 3306", dbConfig.Port)
+	}
+
+	if dbConfig.Username != "rootuser" {
+		t.Errorf("Username = %s, want rootuser", dbConfig.Username)
+	}
+
+	if dbConfig.Password != "rootpass" {
+		t.Errorf("Password = %s, want rootpass", dbConfig.Password)
+	}
+
+	if dbConfig.Database != "rootdb" {
+		t.Errorf("Database = %s, want rootdb", dbConfig.Database)
+	}
+
+	if dbConfig.MaxOpenConns != 50 {
+		t.Errorf("MaxOpenConns = %d, want 50", dbConfig.MaxOpenConns)
+	}
+
+	// Verify defaults are preserved for unset fields
+	if dbConfig.MaxIdleConns != 5 {
+		t.Errorf("MaxIdleConns = %d, want 5 (default)", dbConfig.MaxIdleConns)
+	}
+}
+
+func TestLoadConfig_RootOverridesPrefixed(t *testing.T) {
+	// Test that root-level config takes precedence over prefixed config
+	cfg := &mockConfig{
+		data: map[string]any{
+			"database": map[string]any{
+				"driver": DriverSQLite,
+				"host":   "prefixedhost",
+				"port":   5432,
+			},
+			// Root-level values should override prefixed ones
+			"driver": DriverMySQL,
+			"port":   3306,
+		},
+	}
+
+	// Start with defaults
+	dbConfig := DefaultConfig()
+
+	// Load config
+	err := loadConfig(cfg, dbConfig)
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	// Verify root-level values take precedence
+	if dbConfig.Driver != DriverMySQL {
+		t.Errorf("Driver = %s, want %s (root should override prefixed)", dbConfig.Driver, DriverMySQL)
+	}
+
+	if dbConfig.Port != 3306 {
+		t.Errorf("Port = %d, want 3306 (root should override prefixed)", dbConfig.Port)
+	}
+
+	// Verify prefixed values are used when root doesn't override
+	if dbConfig.Host != "prefixedhost" {
+		t.Errorf("Host = %s, want prefixedhost (from prefixed)", dbConfig.Host)
+	}
+}
