@@ -322,9 +322,10 @@ func TestContext(t *testing.T) {
 	logger := hyperion.NewNoOpLogger()
 	tracer := hyperion.NewNoOpTracer()
 	db := hyperion.NewNoOpDatabase()
+	meter := hyperion.NewNoOpMeter()
 
 	// Test New
-	ctx := hyperion.New(context.Background(), logger, db.Executor(), tracer)
+	ctx := hyperion.New(context.Background(), logger, db.Executor(), tracer, meter)
 	if ctx == nil {
 		t.Fatal("New should return a context")
 	}
@@ -342,6 +343,11 @@ func TestContext(t *testing.T) {
 	// Test Tracer
 	if tr := ctx.Tracer(); tr == nil {
 		t.Error("Tracer should not be nil")
+	}
+
+	// Test Meter
+	if m := ctx.Meter(); m == nil {
+		t.Error("Meter should not be nil")
 	}
 
 	// Test WithTimeout
