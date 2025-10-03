@@ -9,7 +9,9 @@ func NewNoOpTracer() Tracer {
 }
 
 func (t *noopTracer) Start(ctx Context, spanName string, opts ...SpanOption) (Context, Span) {
-	return ctx, &noopSpan{}
+	span := &noopSpan{}
+	newCtx := WithSpan(ctx, span)
+	return newCtx, span
 }
 
 // noopSpan is a no-op implementation of Span interface.

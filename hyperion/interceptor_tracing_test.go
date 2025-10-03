@@ -308,6 +308,7 @@ func (c *customContext) Logger() Logger { return c.logger }
 func (c *customContext) DB() Executor   { return c.db }
 func (c *customContext) Tracer() Tracer { return c.tracer }
 func (c *customContext) Meter() Meter   { return c.meter }
+func (c *customContext) Span() Span     { return &noopSpan{} }
 func (c *customContext) UseIntercept(parts ...any) (ctx Context, endFunc func(*error)) {
 	return c, func(*error) {}
 }
