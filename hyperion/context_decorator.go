@@ -1,86 +1,144 @@
 package hyperion
 
-// LoggerDecorator wraps a Logger to add additional behavior.
-// This enables AOP-style cross-cutting concerns like prefixing, filtering, or routing.
+// Decorator wraps a component to add additional behavior using the AOP pattern.
+// T can be any component type: Logger, Tracer, Executor, Cache, or user-defined types.
 //
-// Example: Add prefix to all log messages
+// This generic design allows users to extend Hyperion with custom component decorators
+// without modifying the framework.
 //
-//	func AddPrefixDecorator(prefix string) LoggerDecorator {
-//	    return func(logger Logger) Logger {
+// Example with built-in Logger:
+//
+//	func AddPrefixDecorator(prefix string) hyperion.Decorator[hyperion.Logger] {
+//	    return func(logger hyperion.Logger) hyperion.Logger {
 //	        return &prefixLogger{logger: logger, prefix: prefix}
 //	    }
 //	}
-type LoggerDecorator func(Logger) Logger
-
-// TracerDecorator wraps a Tracer to add additional behavior.
-// This enables AOP-style tracing enhancements like adding default attributes.
 //
-// Example: Add service name to all spans
+//	logger = hyperion.Chain[hyperion.Logger](
+//	    AddPrefixDecorator("[APP]"),
+//	    FilterByLevelDecorator(hyperion.InfoLevel),
+//	)(logger)
 //
-//	func AddServiceNameDecorator(serviceName string) TracerDecorator {
-//	    return func(tracer Tracer) Tracer {
-//	        return &serviceNameTracer{tracer: tracer, serviceName: serviceName}
+// Example with user-defined component:
+//
+//	type MyCache interface {
+//	    Get(key string) ([]byte, error)
+//	    Set(key string, value []byte) error
+//	}
+//
+//	func MetricsDecorator(metrics Metrics) hyperion.Decorator[MyCache] {
+//	    return func(cache MyCache) MyCache {
+//	        return &metricsCache{cache: cache, metrics: metrics}
 //	    }
 //	}
-type TracerDecorator func(Tracer) Tracer
-
-// ExecutorDecorator wraps an Executor to add additional behavior.
-// This enables AOP-style database operations like query logging, metrics, or caching.
 //
-// Example: Log all queries
-//
-//	func QueryLoggingDecorator(logger Logger) ExecutorDecorator {
-//	    return func(executor Executor) Executor {
-//	        return &queryLoggingExecutor{executor: executor, logger: logger}
-//	    }
-//	}
-type ExecutorDecorator func(Executor) Executor
+//	cache = hyperion.Chain[MyCache](
+//	    MetricsDecorator(metrics),
+//	    LoggingDecorator(logger),
+//	)(cache)
+type Decorator[T any] func(T) T
 
-// ChainLoggerDecorators composes multiple LoggerDecorators into one.
+// Type aliases for framework components to improve API readability.
+// Users can use these aliases or the generic Decorator[T] directly.
+type (
+	// LoggerDecorator wraps a Logger to add additional behavior.
+	// Example: prefixing, filtering, or routing log messages.
+	LoggerDecorator = Decorator[Logger]
+
+	// TracerDecorator wraps a Tracer to add additional behavior.
+	// Example: adding default span attributes or filtering spans.
+	TracerDecorator = Decorator[Tracer]
+
+	// ExecutorDecorator wraps an Executor to add additional behavior.
+	// Example: query logging, metrics collection, or caching.
+	ExecutorDecorator = Decorator[Executor]
+)
+
+// Chain composes multiple decorators into a single decorator.
 // Decorators are applied in the order they are provided (left to right).
 //
-// Example:
+// If no decorators are provided, returns a no-op decorator that returns
+// the component unchanged.
 //
-//	decorator := ChainLoggerDecorators(
+// Example with explicit type parameter:
+//
+//	decorator := hyperion.Chain[hyperion.Logger](
 //	    AddPrefixDecorator("[APP]"),
-//	    FilterByLevelDecorator(InfoLevel),
+//	    FilterByLevelDecorator(hyperion.InfoLevel),
 //	)
 //	logger = decorator(logger)
-func ChainLoggerDecorators(decorators ...LoggerDecorator) LoggerDecorator {
-	return func(logger Logger) Logger {
+//
+// Example with type inference (when type can be inferred from context):
+//
+//	var loggerDec hyperion.Decorator[hyperion.Logger]
+//	loggerDec = hyperion.Chain(
+//	    AddPrefixDecorator("[APP]"),
+//	    FilterByLevelDecorator(hyperion.InfoLevel),
+//	)
+func Chain[T any](decorators ...Decorator[T]) Decorator[T] {
+	if len(decorators) == 0 {
+		return func(t T) T { return t }
+	}
+
+	return func(component T) T {
 		for _, decorator := range decorators {
-			logger = decorator(logger)
+			component = decorator(component)
 		}
-		return logger
+		return component
 	}
 }
 
-// ChainTracerDecorators composes multiple TracerDecorators into one.
-// Decorators are applied in the order they are provided (left to right).
-func ChainTracerDecorators(decorators ...TracerDecorator) TracerDecorator {
-	return func(tracer Tracer) Tracer {
-		for _, decorator := range decorators {
-			tracer = decorator(tracer)
-		}
-		return tracer
-	}
-}
-
-// ChainExecutorDecorators composes multiple ExecutorDecorators into one.
-// Decorators are applied in the order they are provided (left to right).
+// DecoratorRegistry manages a collection of decorators for a specific component type.
+// It allows dynamic registration and batch application of decorators, which is useful
+// for plugin-based architectures or configuration-driven decorator composition.
 //
 // Example:
 //
-//	decorator := ChainExecutorDecorators(
-//	    QueryLoggingDecorator(logger),
-//	    QueryMetricsDecorator(metrics),
-//	)
-//	executor = decorator(executor)
-func ChainExecutorDecorators(decorators ...ExecutorDecorator) ExecutorDecorator {
-	return func(executor Executor) Executor {
-		for _, decorator := range decorators {
-			executor = decorator(executor)
-		}
-		return executor
+//	// Create registry for Logger decorators
+//	registry := hyperion.NewDecoratorRegistry[hyperion.Logger]()
+//
+//	// Register decorators dynamically
+//	if config.EnablePrefix {
+//	    registry.Register(AddPrefixDecorator(config.Prefix))
+//	}
+//	if config.MinLevel != "" {
+//	    registry.Register(FilterByLevelDecorator(config.MinLevel))
+//	}
+//
+//	// Apply all registered decorators
+//	logger = registry.Apply(logger)
+//
+// Thread-safety: DecoratorRegistry is NOT thread-safe. If you need to register
+// decorators from multiple goroutines, you must use external synchronization.
+type DecoratorRegistry[T any] struct {
+	decorators []Decorator[T]
+}
+
+// NewDecoratorRegistry creates a new decorator registry for component type T.
+func NewDecoratorRegistry[T any]() *DecoratorRegistry[T] {
+	return &DecoratorRegistry[T]{
+		decorators: make([]Decorator[T], 0),
 	}
+}
+
+// Register adds a decorator to the registry.
+// Decorators are applied in the order they are registered.
+func (r *DecoratorRegistry[T]) Register(decorator Decorator[T]) {
+	r.decorators = append(r.decorators, decorator)
+}
+
+// Apply applies all registered decorators to the component in registration order.
+// If no decorators are registered, returns the component unchanged.
+func (r *DecoratorRegistry[T]) Apply(component T) T {
+	return Chain(r.decorators...)(component)
+}
+
+// Clear removes all registered decorators from the registry.
+func (r *DecoratorRegistry[T]) Clear() {
+	r.decorators = r.decorators[:0]
+}
+
+// Count returns the number of registered decorators.
+func (r *DecoratorRegistry[T]) Count() int {
+	return len(r.decorators)
 }

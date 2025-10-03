@@ -17,12 +17,24 @@
 //
 // # Decorator Pattern for AOP
 //
-// Decorators enable cross-cutting concerns without modifying core logic:
+// Decorators enable cross-cutting concerns without modifying core logic.
+// The generic Decorator[T] type works with any component:
 //
+//	// Built-in components
 //	factory := hyperion.NewContextFactory(logger, tracer, db,
 //	    hyperion.WithLoggerDecorator(AddPrefixDecorator("[APP]")),
 //	    hyperion.WithExecutorDecorator(QueryLoggingDecorator(logger)),
 //	)
+//
+//	// User-defined components
+//	type MyCache interface {
+//	    Get(key string) ([]byte, error)
+//	}
+//
+//	cache = hyperion.Chain[MyCache](
+//	    MetricsDecorator(metrics),
+//	    LoggingDecorator(logger),
+//	)(cache)
 //
 // # Middleware for Service Layer
 //
