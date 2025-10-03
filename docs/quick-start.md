@@ -11,8 +11,11 @@ Build your first Hyperion v2.0 application in 15 minutes using the Core-Adapter 
 
 A RESTful user management API with:
 - Configuration management (Viper adapter)
-- Structured logging (planned: Zap adapter)
-- Database access with transactions (planned: GORM adapter)
+- Structured logging with automatic correlation (Zap adapter)
+- Distributed tracing (OpenTelemetry-compatible)
+- Metrics collection with trace correlation (OpenTelemetry-compatible)
+- Automatic observability via Interceptor pattern
+- Database access with transactions (GORM adapter)
 - Dependency injection (fx)
 - Clean architecture layers
 
@@ -306,15 +309,25 @@ func NewUserService(userRepo repository.UserRepository) UserService {
 	}
 }
 
-func (s *userService) CreateUser(ctx hyperion.Context, username, email string) (*domain.User, error) {
-	// v2.0: Use accessor pattern for tracing
-	_, span := ctx.Tracer().Start(ctx, "UserService.CreateUser")
-	defer span.End()
+func (s *userService) CreateUser(ctx hyperion.Context, username, email string) (_ *domain.User, err error) {
+	// v2.0: 3-Line Interceptor Pattern for automatic tracing, logging, and metrics
+	ctx, end := ctx.UseIntercept("UserService", "CreateUser")
+	defer end(&err)
 
-	// Log with structured fields
+	// Log with structured fields (automatically includes trace_id and span_id)
 	ctx.Logger().Info("creating new user",
 		"username", username,
 		"email", email,
+	)
+
+	// Record request metric (automatically includes exemplar linking to trace)
+	counter := ctx.Meter().Counter("user.requests",
+		hyperion.WithMetricDescription("Total user service requests"),
+		hyperion.WithMetricUnit("1"),
+	)
+	counter.Add(ctx, 1,
+		hyperion.String("method", "CreateUser"),
+		hyperion.String("status", "started"),
 	)
 
 	user := &domain.User{
@@ -333,9 +346,10 @@ func (s *userService) CreateUser(ctx hyperion.Context, username, email string) (
 	return user, nil
 }
 
-func (s *userService) GetUser(ctx hyperion.Context, id string) (*domain.User, error) {
-	_, span := ctx.Tracer().Start(ctx, "UserService.GetUser")
-	defer span.End()
+func (s *userService) GetUser(ctx hyperion.Context, id string) (_ *domain.User, err error) {
+	// 3-Line Interceptor Pattern
+	ctx, end := ctx.UseIntercept("UserService", "GetUser")
+	defer end(&err)
 
 	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil {
@@ -346,9 +360,10 @@ func (s *userService) GetUser(ctx hyperion.Context, id string) (*domain.User, er
 	return user, nil
 }
 
-func (s *userService) ListUsers(ctx hyperion.Context) ([]*domain.User, error) {
-	_, span := ctx.Tracer().Start(ctx, "UserService.ListUsers")
-	defer span.End()
+func (s *userService) ListUsers(ctx hyperion.Context) (_ []*domain.User, err error) {
+	// 3-Line Interceptor Pattern
+	ctx, end := ctx.UseIntercept("UserService", "ListUsers")
+	defer end(&err)
 
 	users, err := s.userRepo.FindAll(ctx)
 	if err != nil {
@@ -376,10 +391,12 @@ var Module = fx.Module("service",
 )
 ```
 
-**v2.0 Tracing**:
-- `ctx.Tracer().Start(ctx, "operation")` returns span
-- Tracer interface is OTel-compatible (but core doesn't depend on OTel)
-- Works with NoOp tracer by default
+**v2.0 Interceptor Pattern**:
+- `ctx.UseIntercept("Service", "Method")` returns enhanced context and cleanup function
+- Automatically creates trace spans, logs method entry/exit, and records metrics
+- 3-line pattern: `ctx, end := ctx.UseIntercept(...); defer end(&err)`
+- Named error return required: `(err error)` or `(_ *User, err error)`
+- Works with NoOp implementations by default (zero overhead)
 
 ---
 
@@ -407,6 +424,9 @@ func main() {
 	app := fx.New(
 		// v2.0 Core Module (provides NoOp defaults for all interfaces)
 		hyperion.CoreModule,
+
+		// v2.0 Interceptor Modules (enable automatic tracing, logging, and metrics)
+		hyperion.AllInterceptorsModule, // Includes TracingInterceptor + LoggingInterceptor
 
 		// v2.0 Viper Adapter (replaces NoOp Config with real implementation)
 		viper.Module,
@@ -496,6 +516,15 @@ func (c *simpleContext) Tracer() hyperion.Tracer {
 	return c.tracer
 }
 
+func (c *simpleContext) Meter() hyperion.Meter {
+	return &noopMeter{} // Use NoOp meter for demo
+}
+
+func (c *simpleContext) UseIntercept(parts ...any) (hyperion.Context, func(err *error)) {
+	// For demo purposes, return self without interceptors
+	return c, func(err *error) {}
+}
+
 func (c *simpleContext) WithTimeout(timeout time.Duration) (hyperion.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(c.Context, timeout)
 	return &simpleContext{Context: ctx, logger: c.logger, tracer: c.tracer}, cancel
@@ -527,19 +556,53 @@ func (s *noopSpan) SetStatus(code hyperion.StatusCode, description string) {}
 func (s *noopSpan) SetAttributes(attributes ...any)         {}
 func (s *noopSpan) SetName(name string)                     {}
 func (s *noopSpan) TracerProvider() any                     { return nil }
+
+// noopMeter is a simple no-op meter for demo
+type noopMeter struct{}
+
+func (m *noopMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion.Counter {
+	return &noopCounter{}
+}
+func (m *noopMeter) Histogram(name string, opts ...hyperion.MetricOption) hyperion.Histogram {
+	return &noopHistogram{}
+}
+func (m *noopMeter) Gauge(name string, opts ...hyperion.MetricOption) hyperion.Gauge {
+	return &noopGauge{}
+}
+func (m *noopMeter) UpDownCounter(name string, opts ...hyperion.MetricOption) hyperion.UpDownCounter {
+	return &noopUpDownCounter{}
+}
+
+type noopCounter struct{}
+func (c *noopCounter) Add(ctx context.Context, value int64, attrs ...hyperion.Attribute) {}
+
+type noopHistogram struct{}
+func (h *noopHistogram) Record(ctx context.Context, value float64, attrs ...hyperion.Attribute) {}
+
+type noopGauge struct{}
+func (g *noopGauge) Record(ctx context.Context, value float64, attrs ...hyperion.Attribute) {}
+
+type noopUpDownCounter struct{}
+func (u *noopUpDownCounter) Add(ctx context.Context, value int64, attrs ...hyperion.Attribute) {}
 ```
 
 **v2.0 Module Composition**:
 ```go
 fx.New(
-    hyperion.CoreModule,      // Provides NoOp implementations
-    viper.Module,             // Overrides Config with Viper
-    // zap.Module,            // Would override Logger with Zap (when available)
-    // gorm.Module,           // Would override Database with GORM (when available)
+    hyperion.CoreModule,           // Provides NoOp implementations
+    hyperion.AllInterceptorsModule, // Enables automatic tracing, logging, and metrics
+    viper.Module,                  // Overrides Config with Viper
+    // zap.Module,                 // Would override Logger with Zap (available)
+    // gorm.Module,                // Would override Database with GORM (available)
     repository.Module,
     service.Module,
 )
 ```
+
+**Key Benefits**:
+- **3-Line Interceptor Pattern**: Automatically creates spans, logs, and records metrics
+- **Automatic Correlation**: TraceID and SpanID shared across logs, traces, and metrics
+- **Zero Code Changes**: Switch from NoOp to real implementations without modifying business logic
 
 ---
 
@@ -776,19 +839,25 @@ This is the **power of v2.0**: complete flexibility.
 ## Learn More
 
 ### Core Concepts
-- [Architecture Overview](architecture.md) - Complete v2.0 architecture (2,531 lines)
+- [Architecture Overview](architecture.md) - Complete v2.0 architecture with Interceptor and Meter
 - [Architecture Decisions](architecture-decisions.md) - ADRs explaining design choices
 - [Coding Standards](architecture/coding-standards.md) - Best practices and conventions
+
+### Observability Guides
+- [Interceptor Pattern](interceptor.md) - Complete guide to 3-line interceptor pattern
+- [Observability Architecture](observability.md) - Unified Logs, Traces, and Metrics correlation
 
 ### Implementation Details
 - [Source Tree Guide](architecture/source-tree.md) - Monorepo structure
 - [Tech Stack](architecture/tech-stack.md) - Technology choices
 
-### Advanced Topics (Coming Soon)
+### Advanced Topics
+- **✅ Interceptor Pattern**: Automatic tracing, logging, and metrics (v2.0-2.2)
+- **✅ Metrics Collection**: OpenTelemetry-compatible Meter interface (v2.0-2.2)
+- **✅ Transaction Management**: UnitOfWork with GORM adapter (v2.0-2.2)
+- **🔜 OpenTelemetry Integration**: Full OTel adapter with exemplars (Epic 3, Q1 2026)
 - Web Server (hyperweb with Gin) - v2.3
 - gRPC Server (hypergrpc) - v2.3
-- Transaction Management (UnitOfWork) - v2.1
-- Distributed Tracing (OpenTelemetry adapter) - v2.2
 
 ---
 

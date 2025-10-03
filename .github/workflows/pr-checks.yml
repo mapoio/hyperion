@@ -47,6 +47,7 @@ jobs:
             docs
             ci
             deps
+            context
           requireScope: false
 
   # Check for large files

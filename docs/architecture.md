@@ -407,7 +407,67 @@ func Bool(key string, value bool) Attribute
 - 🔜 `adapter/otel`: Full OpenTelemetry SDK integration
 - 🔜 `adapter/jaeger`: Direct Jaeger client (if needed)
 
-### 5.3 Database Interface
+### 5.3 Meter Interface
+
+```go
+package hyperion
+
+type Meter interface {
+    Counter(name string, opts ...MetricOption) Counter
+    Histogram(name string, opts ...MetricOption) Histogram
+    Gauge(name string, opts ...MetricOption) Gauge
+    UpDownCounter(name string, opts ...MetricOption) UpDownCounter
+}
+
+type Counter interface {
+    Add(ctx context.Context, value int64, attrs ...Attribute)
+}
+
+type Histogram interface {
+    Record(ctx context.Context, value float64, attrs ...Attribute)
+}
+
+type Gauge interface {
+    Record(ctx context.Context, value float64, attrs ...Attribute)
+}
+
+type UpDownCounter interface {
+    Add(ctx context.Context, value int64, attrs ...Attribute)
+}
+
+type MetricOption interface {
+    // Private method to prevent external implementation
+    applyMetricOption(*metricConfig)
+}
+
+// Helper functions for metric options
+func WithMetricDescription(desc string) MetricOption
+func WithMetricUnit(unit string) MetricOption
+```
+
+**Design Rationale**:
+- OpenTelemetry-compatible metric types
+- Context-aware recording for automatic trace exemplars
+- Counter: Monotonically increasing value (e.g., request count)
+- Histogram: Value distribution (e.g., latency)
+- Gauge: Point-in-time value (e.g., active connections)
+- UpDownCounter: Value that can increase or decrease (e.g., queue size)
+
+**Automatic Trace Correlation**:
+When using OpenTelemetry adapter, passing `context.Context` to metric recording methods automatically creates exemplars linking metrics to traces:
+
+```go
+// Metric automatically includes trace_id as exemplar
+counter := ctx.Meter().Counter("requests")
+counter.Add(ctx, 1)  // ctx contains TraceID/SpanID
+```
+
+**Adapter Implementations**:
+- ✅ NoOp (default): Zero overhead
+- 🔜 `adapter/otel`: Full OpenTelemetry Metrics SDK with exemplar support
+- 🔜 `adapter/prometheus`: Direct Prometheus client (if needed)
+
+### 5.4 Database Interface
 
 ```go
 package hyperion
@@ -516,6 +576,150 @@ type Cache interface {
 - 🔜 `adapter/ristretto`: High-performance in-memory cache
 - 🔜 `adapter/redis`: Distributed cache (go-redis)
 - 🔜 `adapter/memcached`: Traditional distributed cache
+
+### 5.6 Interceptor Interface
+
+```go
+package hyperion
+
+type Interceptor interface {
+    // Name returns the interceptor's unique identifier
+    Name() string
+
+    // Intercept wraps method execution with cross-cutting concerns
+    // Returns new context, cleanup function, and optional error
+    Intercept(ctx Context, fullPath string) (Context, func(err *error), error)
+
+    // Order determines execution sequence (lower executes first)
+    // Built-in: TracingInterceptor=100, LoggingInterceptor=200
+    Order() int
+}
+```
+
+**Design Rationale**:
+- **AOP without code generation**: Method-level interception via simple pattern
+- **LIFO cleanup**: End functions execute in reverse order (predictable)
+- **Composable**: Multiple interceptors work together seamlessly
+- **Type-safe**: No reflection, compile-time guarantees
+
+**3-Line Usage Pattern**:
+```go
+func (s *Service) GetUser(ctx hyperion.Context, id string) (err error) {
+    ctx, end := ctx.UseIntercept("Service", "GetUser")
+    defer end(&err)
+
+    // Business logic here
+    return s.repository.FindByID(ctx, id)
+}
+```
+
+**Built-in Interceptors**:
+- ✅ `TracingInterceptor` (Order: 100): Auto-create spans for method calls
+- ✅ `LoggingInterceptor` (Order: 200): Auto-log method entry/exit with duration
+- 🔜 Custom interceptors: Metrics, Transactions, Circuit Breakers, etc.
+
+**Registration via fx**:
+```go
+fx.Provide(
+    fx.Annotate(
+        NewCustomInterceptor,
+        fx.ResultTags(`group:"hyperion.interceptors"`),
+    ),
+)
+```
+
+**Selective Application**:
+```go
+// Only apply specific interceptors
+ctx, end := ctx.UseIntercept("Service", "Method",
+    hyperion.WithOnly("tracing"))
+
+// Exclude specific interceptors
+ctx, end := ctx.UseIntercept("Service", "Method",
+    hyperion.WithExclude("logging"))
+
+// Add method-specific interceptors
+ctx, end := ctx.UseIntercept("Service", "Method",
+    hyperion.WithAdditional(transactionInterceptor))
+```
+
+**See Also**: [Interceptor Pattern Guide](interceptor.md)
+
+### 5.7 Context Interface
+
+```go
+package hyperion
+
+type Context interface {
+    context.Context  // Embeds standard context
+
+    // Observability access
+    Logger() Logger
+    Tracer() Tracer
+    Meter() Meter
+
+    // Infrastructure access
+    DB() Executor
+
+    // Context creation helpers
+    WithTimeout(timeout time.Duration) (Context, context.CancelFunc)
+    WithCancel() (Context, context.CancelFunc)
+    WithDeadline(deadline time.Time) (Context, context.CancelFunc)
+
+    // Interceptor integration
+    UseIntercept(parts ...any) (ctx Context, end func(err *error))
+}
+
+// Context creation and modification
+func New(ctx context.Context, logger Logger, db Executor, tracer Tracer, meter Meter) Context
+func WithLogger(ctx Context, logger Logger) Context
+func WithTracer(ctx Context, tracer Tracer) Context
+func WithDB(ctx Context, db Executor) Context
+```
+
+**Design Rationale**:
+- **Embeds `context.Context`**: Full compatibility with stdlib and 3rd-party libraries
+- **Unified access**: Single source for Logger, Tracer, Meter, DB
+- **Immutable helpers**: `WithLogger()`, `WithTracer()`, etc. return new context
+- **Type-safe**: Compile-time guarantees, no type assertions needed
+
+**Automatic Trace Correlation**:
+```go
+func (s *Service) ProcessOrder(ctx hyperion.Context, orderID string) error {
+    // Log automatically includes trace_id and span_id
+    ctx.Logger().Info("processing", "order_id", orderID)
+
+    // Metric automatically includes exemplar → trace_id
+    ctx.Meter().Counter("orders").Add(ctx, 1)
+
+    // Child span inherits parent trace context
+    newCtx, span := ctx.Tracer().Start(ctx, "validate")
+    defer span.End()
+
+    // All three pillars automatically correlated!
+    return nil
+}
+```
+
+**ContextFactory**:
+```go
+type ContextFactory interface {
+    New(ctx context.Context) Context
+}
+
+// Usage in service
+func NewService(factory ContextFactory) *Service {
+    return &Service{factory: factory}
+}
+
+func (s *Service) Handle(stdCtx context.Context) error {
+    ctx := s.factory.New(stdCtx)
+    // Now ctx has Logger, Tracer, Meter, DB, Interceptors
+    return nil
+}
+```
+
+**See Also**: [Observability Architecture](observability.md)
 
 ---
 
@@ -703,6 +907,13 @@ var DefaultCacheModule = fx.Module("hyperion.default_cache",
         return NewNoOpCache()
     }),
 )
+
+var DefaultMeterModule = fx.Module("hyperion.default_meter",
+    fx.Provide(func() Meter {
+        fmt.Println("[Hyperion] Using no-op Meter")
+        return NewNoOpMeter()
+    }),
+)
 ```
 
 **Design**: Simple `fx.Provide` without complex decoration logic.
@@ -720,6 +931,10 @@ var CoreModule = fx.Module("hyperion.core",
         DefaultDatabaseModule,
         DefaultConfigModule,
         DefaultCacheModule,
+        DefaultMeterModule,
+
+        ContextModule,        // ContextFactory with all dependencies
+        InterceptorsModule,   // Interceptor registration system
     ),
 )
 ```
@@ -784,8 +999,72 @@ fx.New(
 
 **Result**: Application gets `zap.Logger`, not `noopLogger`.
 
----
+### 7.5 Interceptor Modules
 
+**Built-in Interceptor Modules**:
+
+```go
+// hyperion/interceptor_module.go
+package hyperion
+
+// TracingInterceptorModule provides automatic tracing
+var TracingInterceptorModule = fx.Module("hyperion.interceptor.tracing",
+    fx.Provide(
+        fx.Annotate(
+            NewTracingInterceptor,
+            fx.ResultTags(`group:"hyperion.interceptors"`),
+        ),
+    ),
+)
+
+// LoggingInterceptorModule provides automatic logging
+var LoggingInterceptorModule = fx.Module("hyperion.interceptor.logging",
+    fx.Provide(
+        fx.Annotate(
+            NewLoggingInterceptor,
+            fx.ResultTags(`group:"hyperion.interceptors"`),
+        ),
+    ),
+)
+
+// AllInterceptorsModule enables all built-in interceptors
+var AllInterceptorsModule = fx.Module("hyperion.interceptors.all",
+    fx.Options(
+        TracingInterceptorModule,
+        LoggingInterceptorModule,
+    ),
+)
+```
+
+**Usage**:
+```go
+fx.New(
+    hyperion.CoreModule,
+    hyperion.AllInterceptorsModule,  // Enable tracing + logging
+
+    fx.Provide(NewUserService),
+    fx.Invoke(runApp),
+)
+```
+
+**Custom Interceptor Registration**:
+```go
+// Register custom interceptor
+fx.Provide(
+    fx.Annotate(
+        NewMetricsInterceptor,
+        fx.ResultTags(`group:"hyperion.interceptors"`),
+    ),
+)
+```
+
+**InterceptorsModule** (internal):
+```go
+var InterceptorsModule = fx.Module("hyperion.interceptors",
+    // Provides empty interceptor registry by default
+    // Custom interceptors added via fx groups
+)
+```
 
 ---
 
@@ -2018,22 +2297,32 @@ ok      github.com/mapoio/hyperion/adapter/viper    0.015s
 |-----------|-----------|------|----------------|--------|
 | Logger | ✅ | ✅ | ✅ | ✅ Complete |
 | Tracer | ✅ | ✅ | ✅ | ✅ Complete |
+| Meter | ✅ | ✅ | ✅ | ✅ Complete |
 | Database | ✅ | ✅ | ✅ | ✅ Complete |
 | Config | ✅ | ✅ | ✅ | ✅ Complete |
 | Cache | ✅ | ✅ | ✅ | ✅ Complete |
 | Context | ✅ | N/A | N/A | ✅ Complete |
+| Interceptor | ✅ | N/A | ✅ | ✅ Complete |
 | Module System | ✅ | N/A | ✅ | ✅ Complete |
 
-### 14.2 Adapters
+### 14.2 Built-in Interceptors
 
-| Adapter | Interface | Status | Priority |
-|---------|-----------|--------|----------|
-| Viper | Config/ConfigWatcher | ✅ Complete | P0 |
-| Zap | Logger | 🔜 Planned | P0 |
-| OTEL | Tracer | 🔜 Planned | P1 |
-| GORM | Database | 🔜 Planned | P0 |
-| Ristretto | Cache | 🔜 Planned | P1 |
-| Redis | Cache | 🔜 Planned | P1 |
+| Interceptor | Purpose | Order | Status |
+|-------------|---------|-------|--------|
+| TracingInterceptor | Auto-create spans | 100 | ✅ Complete |
+| LoggingInterceptor | Auto-log entry/exit | 200 | ✅ Complete |
+| Custom Interceptors | User-defined (Metrics, TX, etc.) | Configurable | ✅ Supported |
+
+### 14.3 Adapters
+
+| Adapter | Interface | Status | Test Coverage | Priority |
+|---------|-----------|--------|---------------|----------|
+| Viper | Config/ConfigWatcher | ✅ Complete | 84.4% | P0 |
+| Zap | Logger | ✅ Complete | 93.9% | P0 |
+| GORM | Database/Executor/UnitOfWork | ✅ Complete | 82.1% | P0 |
+| OTEL | Tracer + Meter | 🔜 Planned | - | P1 |
+| Ristretto | Cache | 🔜 Planned | - | P1 |
+| Redis | Cache | 🔜 Planned | - | P1 |
 
 ### 14.3 Build & Test Results
 
@@ -2059,25 +2348,20 @@ $ golangci-lint run ./...
 
 ### 14.4 Known Limitations
 
-1. **Database Adapter Missing**: `adapter/gorm` not yet implemented
-   - Impact: Applications cannot use real database
-   - Workaround: Use NoOp for prototyping
-   - ETA: v2.1
+1. **OpenTelemetry Adapter Missing**: `adapter/otel` not yet implemented
+   - Impact: No distributed tracing and metrics with automatic correlation
+   - Workaround: Use NoOp Tracer and Meter (development), or implement custom adapter
+   - ETA: Epic 3 (Q1 2026)
 
-2. **Logger Adapter Missing**: `adapter/zap` not yet implemented
-   - Impact: No structured logging output
-   - Workaround: Use NoOp (silent) or fmt.Println
-   - ETA: v2.1
+2. **Cache Adapters Missing**: `adapter/ristretto` and `adapter/redis` not implemented
+   - Impact: No production caching support
+   - Workaround: Use NoOp Cache (always miss) or implement custom adapter
+   - ETA: Story 2.3 (Dec 2025)
 
-3. **Tracer Adapter Missing**: `adapter/otel` not yet implemented
-   - Impact: No distributed tracing
-   - Workaround: Use NoOp (no-op spans)
-   - ETA: v2.2
-
-4. **Context Implementation Placeholder**: Full Context implementation pending
-   - Impact: Accessor methods not fully functional
-   - Workaround: Pass dependencies directly
-   - ETA: v2.1
+3. **Automatic Metrics Interceptor**: Not yet provided as built-in
+   - Impact: Manual metric recording required
+   - Workaround: Create custom MetricsInterceptor or record metrics manually
+   - ETA: Epic 3 (Q1 2026)
 
 ---
 
@@ -2231,50 +2515,55 @@ func NewMyService(config hyperion.Config) *MyService {
 
 ## 16. Roadmap
 
-### v2.0 (✅ Current - NoOp Foundation)
+### v2.0-2.2 (✅ Current - Core Foundation + Essential Adapters)
 
-**Completed**:
+**Completed (Epic 1 + Epic 2)**:
 - [x] Monorepo structure with Go workspace
-- [x] Core interfaces (Logger, Tracer, Database, Config, Cache, Context)
+- [x] Core interfaces (Logger, Tracer, Meter, Database, Config, Cache, Context, Interceptor)
 - [x] NoOp implementations for all interfaces
 - [x] Default module system (CoreModule, CoreWithoutDefaultsModule)
-- [x] Viper adapter (Config)
+- [x] Interceptor pattern (TracingInterceptor, LoggingInterceptor)
+- [x] Unified observability architecture (Logs, Traces, Metrics correlation)
+- [x] Viper adapter (Config + ConfigWatcher) - 84.4% coverage
+- [x] Zap adapter (Logger) - 93.9% coverage
+- [x] GORM adapter (Database + Executor + UnitOfWork) - 82.1% coverage
+- [x] ContextFactory with full dependency injection
 - [x] Comprehensive documentation
 
-**Next Steps**:
-- Implement missing adapters (Zap, OTEL, GORM)
+**Status**: ✅ Production Ready
 
-### v2.1 (🔜 Planned - Essential Adapters)
+### v2.3 (🔜 In Progress - Cache & Examples)
+
+**Target Date**: Dec 2025
+
+**Goals**:
+- [ ] Ristretto adapter (Cache - in-memory)
+- [ ] Redis adapter (Cache - distributed)
+- [ ] Example CRUD application with full observability
+- [ ] Performance benchmarks
+
+**Deliverables**:
+- Production-ready caching support
+- Complete working example with Gin + GORM + Observability
+- Performance benchmarks
+
+### Epic 3 (🔜 Planned - OpenTelemetry Integration)
 
 **Target Date**: Q1 2026
 
 **Goals**:
-- [ ] Zap adapter (Logger)
-- [ ] GORM adapter (Database + UnitOfWork)
-- [ ] Full Context implementation
-- [ ] Basic middleware support (logging, recovery)
-- [ ] Example applications (simple-api, fullstack)
+- [ ] OpenTelemetry adapter (Tracer + Meter) with full SDK integration
+- [ ] Automatic trace correlation for Logs/Metrics (via OTel Logs Bridge)
+- [ ] Exemplar support for Metrics → Traces navigation
+- [ ] OTel exporters (Jaeger, Prometheus, OTLP)
+- [ ] Distributed context propagation (Baggage API)
+- [ ] Sampling strategies configuration
 
 **Deliverables**:
-- Production-ready logging
-- Database access with transactions
-- Working end-to-end examples
-
-### v2.2 (🔜 Planned - Observability)
-
-**Target Date**: Q2 2026
-
-**Goals**:
-- [ ] OpenTelemetry adapter (Tracer)
-- [ ] Metrics interface + Prometheus adapter
-- [ ] Cache adapters (Ristretto, Redis)
-- [ ] Health check framework
-- [ ] Graceful shutdown improvements
-
-**Deliverables**:
-- Full distributed tracing
-- Metrics collection
-- Production-grade observability
+- Full OpenTelemetry SDK integration
+- Automatic Logs ↔ Traces ↔ Metrics correlation
+- Production observability backends support
+- Observability best practices guide
 
 ### v2.3 (🔜 Planned - Web Framework)
 

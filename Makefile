@@ -349,9 +349,9 @@ lint-commits: ## Validate commit messages (conventional commits)
 		commits=$$(git log --format=%s --no-merges origin/main..HEAD 2>/dev/null || git log --format=%s --no-merges -10); \
 		echo "$$commits" | while IFS= read -r commit; do \
 			[ -z "$$commit" ] && continue; \
-			if ! echo "$$commit" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+'; then \
+			if ! echo "$$commit" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+'; then \
 				echo "❌ Invalid commit message: $$commit"; \
-				echo "Expected format: type(scope): description"; \
+				echo "Expected format: type(scope): description or type(scope)!: description"; \
 				exit 1; \
 			fi; \
 		done; \
