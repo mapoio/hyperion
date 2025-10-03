@@ -12,21 +12,89 @@ import (
 type OrderService struct {
 	paymentService   *PaymentService
 	inventoryService *InventoryService
+	// Metrics
+	orderCounter    hyperion.Counter   // Total orders created
+	orderValue      hyperion.Histogram // Order amount distribution
+	orderDuration   hyperion.Histogram // Order processing time
+	activeOrders    hyperion.UpDownCounter // Currently processing orders
 }
 
 // NewOrderService creates a new OrderService instance
 func NewOrderService(
 	paymentService *PaymentService,
 	inventoryService *InventoryService,
+	meter hyperion.Meter,
 ) *OrderService {
 	return &OrderService{
 		paymentService:   paymentService,
 		inventoryService: inventoryService,
+		// Initialize metrics
+		orderCounter: meter.Counter("order.created.total",
+			hyperion.WithDescription("Total number of orders created"),
+			hyperion.WithUnit("1"),
+		),
+		orderValue: meter.Histogram("order.amount",
+			hyperion.WithDescription("Order amount distribution"),
+			hyperion.WithUnit("USD"),
+		),
+		orderDuration: meter.Histogram("order.processing.duration",
+			hyperion.WithDescription("Order processing duration in milliseconds"),
+			hyperion.WithUnit("ms"),
+		),
+		activeOrders: meter.UpDownCounter("order.active",
+			hyperion.WithDescription("Number of orders currently being processed"),
+			hyperion.WithUnit("1"),
+		),
 	}
 }
 
 // CreateOrder creates a new order (Level 1 - Entry point)
 func (s *OrderService) CreateOrder(hctx hyperion.Context, userID, productID string, amount float64) (orderID string, err error) {
+	// Track order processing start time
+	startTime := time.Now()
+
+	// Increment active orders counter
+	s.activeOrders.Add(hctx, 1,
+		hyperion.String("service", "order"),
+		hyperion.String("operation", "create"),
+	)
+	defer func() {
+		// Decrement active orders counter when done
+		s.activeOrders.Add(hctx, -1,
+			hyperion.String("service", "order"),
+			hyperion.String("operation", "create"),
+		)
+
+		// Record processing duration
+		duration := float64(time.Since(startTime).Milliseconds())
+		s.orderDuration.Record(hctx, duration,
+			hyperion.String("service", "order"),
+			hyperion.String("operation", "create"),
+			hyperion.String("status", func() string {
+				if err != nil {
+					return "error"
+				}
+				return "success"
+			}()),
+		)
+
+		// Record successful order metrics
+		if err == nil {
+			s.orderCounter.Add(hctx, 1,
+				hyperion.String("service", "order"),
+				hyperion.String("status", "success"),
+			)
+			s.orderValue.Record(hctx, amount,
+				hyperion.String("service", "order"),
+			)
+		} else {
+			s.orderCounter.Add(hctx, 1,
+				hyperion.String("service", "order"),
+				hyperion.String("status", "error"),
+			)
+		}
+	}()
+
 	// UseIntercept applies all registered interceptors (tracing, logging, etc.)
 	// The TracingInterceptor automatically:
 	// 1. Creates OpenTelemetry span for "OrderService.CreateOrder"

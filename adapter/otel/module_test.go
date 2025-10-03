@@ -107,7 +107,7 @@ func TestNewOtelMeter(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "otlp config (not implemented)",
+			name: "otlp config",
 			config: MetricsConfig{
 				Enabled:     true,
 				ServiceName: "test-service",
@@ -115,7 +115,7 @@ func TestNewOtelMeter(t *testing.T) {
 				Endpoint:    "localhost:4317",
 				Interval:    10 * time.Second,
 			},
-			wantErr: true, // OTLP metrics not yet implemented
+			wantErr: false, // OTLP metrics now implemented
 		},
 		{
 			name: "disabled metrics",

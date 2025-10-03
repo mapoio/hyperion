@@ -29,10 +29,12 @@ tracing:
 metrics:
   enabled: true
   service_name: "hyperion-otel-example"
-  exporter: "prometheus"
+  exporter: "otlp"  # Changed from prometheus to otlp for HyperDX
+  endpoint: "localhost:4317"  # HyperDX local gRPC endpoint
   interval: 10s
   attributes:
     environment: "development"
+    version: "1.0.0"
 
 # HTTP Server configuration
 server:
