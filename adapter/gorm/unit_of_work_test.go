@@ -47,12 +47,49 @@ func (m *mockSpanContext) TraceID() string { return "trace-id" }
 func (m *mockSpanContext) SpanID() string  { return "span-id" }
 func (m *mockSpanContext) IsValid() bool   { return true }
 
+// mockMeter implements hyperion.Meter for testing.
+type mockMeter struct{}
+
+func (m *mockMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion.Counter {
+	return &mockCounter{}
+}
+func (m *mockMeter) Histogram(name string, opts ...hyperion.MetricOption) hyperion.Histogram {
+	return &mockHistogram{}
+}
+func (m *mockMeter) Gauge(name string, opts ...hyperion.MetricOption) hyperion.Gauge {
+	return &mockGauge{}
+}
+func (m *mockMeter) UpDownCounter(name string, opts ...hyperion.MetricOption) hyperion.UpDownCounter {
+	return &mockUpDownCounter{}
+}
+
+// mockCounter implements hyperion.Counter for testing.
+type mockCounter struct{}
+
+func (m *mockCounter) Add(ctx context.Context, value int64, attrs ...hyperion.Attribute) {}
+
+// mockHistogram implements hyperion.Histogram for testing.
+type mockHistogram struct{}
+
+func (m *mockHistogram) Record(ctx context.Context, value float64, attrs ...hyperion.Attribute) {}
+
+// mockGauge implements hyperion.Gauge for testing.
+type mockGauge struct{}
+
+func (m *mockGauge) Record(ctx context.Context, value float64, attrs ...hyperion.Attribute) {}
+
+// mockUpDownCounter implements hyperion.UpDownCounter for testing.
+type mockUpDownCounter struct{}
+
+func (m *mockUpDownCounter) Add(ctx context.Context, value int64, attrs ...hyperion.Attribute) {}
+
 func newTestContext(executor hyperion.Executor) hyperion.Context {
 	return hyperion.New(
 		context.Background(),
 		&mockLogger{},
 		executor,
 		&mockTracer{},
+		&mockMeter{},
 	)
 }
 

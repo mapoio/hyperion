@@ -1,6 +1,7 @@
 package zap
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,13 +15,17 @@ import (
 
 // zapLogger implements hyperion.Logger interface using Zap.
 type zapLogger struct {
-	sugar *zap.SugaredLogger
-	atom  zap.AtomicLevel
-	core  *zap.Logger
+	sugar         *zap.SugaredLogger
+	atom          zap.AtomicLevel
+	core          *zap.Logger
+	contextLogger *contextLogger // Context-aware logger for trace correlation
 }
 
 // Ensure zapLogger implements hyperion.Logger interface.
 var _ hyperion.Logger = (*zapLogger)(nil)
+
+// Ensure zapLogger implements hyperion.ContextAwareLogger interface.
+var _ hyperion.ContextAwareLogger = (*zapLogger)(nil)
 
 // Config holds configuration for Zap logger.
 // Fields are ordered for optimal memory alignment.
@@ -130,13 +135,17 @@ func NewZapLogger(cfg hyperion.Config) (hyperion.Logger, error) {
 		atom,
 	)
 
-	// Create logger
-	zapCore := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+	// Wrap core with OTel bridge for automatic trace context injection
+	otelCore := newOtelCore(core)
+
+	// Create logger with OTel-wrapped core
+	zapCore := zap.New(otelCore, zap.AddCaller(), zap.AddCallerSkip(1))
 
 	return &zapLogger{
-		sugar: zapCore.Sugar(),
-		atom:  atom,
-		core:  zapCore,
+		sugar:         zapCore.Sugar(),
+		atom:          atom,
+		core:          zapCore,
+		contextLogger: newContextLogger(zapCore),
 	}, nil
 }
 
@@ -167,10 +176,12 @@ func (l *zapLogger) Fatal(msg string, fields ...any) {
 
 // With creates a child logger with additional fields.
 func (l *zapLogger) With(fields ...any) hyperion.Logger {
+	childCore := l.core.With(convertToZapFields(fields)...)
 	return &zapLogger{
-		sugar: l.sugar.With(fields...),
-		atom:  l.atom,
-		core:  l.core,
+		sugar:         l.sugar.With(fields...),
+		atom:          l.atom,
+		core:          childCore,
+		contextLogger: newContextLogger(childCore),
 	}
 }
 
@@ -192,6 +203,13 @@ func (l *zapLogger) GetLevel() hyperion.LogLevel {
 // Sync flushes any buffered log entries.
 func (l *zapLogger) Sync() error {
 	return l.core.Sync()
+}
+
+// WithContext returns a context-aware logger that automatically injects
+// trace context (trace_id and span_id) into all log entries.
+// This implements the hyperion.ContextAwareLogger interface.
+func (l *zapLogger) WithContext(ctx context.Context) hyperion.Logger {
+	return newContextAwareLogger(ctx, l)
 }
 
 // levelMapping defines bidirectional mapping between hyperion and zap log levels.
@@ -226,4 +244,22 @@ func fromZapLevel(level zapcore.Level) hyperion.LogLevel {
 		return hyperionLevel
 	}
 	return hyperion.InfoLevel // default
+}
+
+// convertToZapFields converts variadic fields to zap.Field slice.
+// This helper handles the conversion from sugared fields to structured fields.
+func convertToZapFields(fields ...any) []zap.Field {
+	if len(fields) == 0 {
+		return nil
+	}
+
+	zapFields := make([]zap.Field, 0, len(fields)/2)
+	for i := 0; i < len(fields)-1; i += 2 {
+		key, ok := fields[i].(string)
+		if !ok {
+			continue
+		}
+		zapFields = append(zapFields, zap.Any(key, fields[i+1]))
+	}
+	return zapFields
 }
