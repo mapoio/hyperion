@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # HyperDX local instance
+  hyperdx:
+    image: docker.hyperdx.io/hyperdx/hyperdx-local:2-beta
+    container_name: hyperdx-local
+    ports:
+      - "4318:4318"  # OTLP HTTP endpoint
+      - "4317:4317"  # OTLP gRPC endpoint
+      - "8080:8080"  # HyperDX UI
+      - "8123:8123"  # ClickHouse server
+    environment:
+      - HYPERDX_API_KEY=local-dev-key  # Can be any non-empty value for local
+    volumes:
+      - hyperdx-data:/var/lib/clickhouse
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  hyperdx-data:
+    driver: local

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/mapoio/hyperion"
+
 	"go.opentelemetry.io/otel/trace"
 )
 

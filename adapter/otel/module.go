@@ -5,15 +5,12 @@ import (
 	"fmt"
 
 	"github.com/mapoio/hyperion"
-	"go.opentelemetry.io/otel"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+
 	"go.uber.org/fx"
 )
 
 // NewOtelTracer creates an OpenTelemetry Tracer from configuration.
+// It uses a shared provider to ensure consistent resource attributes across telemetry signals.
 func NewOtelTracer(config hyperion.Config) (hyperion.Tracer, error) {
 	cfg, err := LoadTracingConfig(config)
 	if err != nil {
@@ -24,37 +21,25 @@ func NewOtelTracer(config hyperion.Config) (hyperion.Tracer, error) {
 		return hyperion.NewNoOpTracer(), nil
 	}
 
-	// Create exporter based on config
-	exporter, err := createTraceExporter(cfg)
+	// Get or create shared provider
+	provider, err := getOrCreateProvider(cfg.ServiceName, cfg.Attributes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+		return nil, fmt.Errorf("failed to initialize provider: %w", err)
 	}
 
-	// Create resource with service name
-	res, err := resource.New(context.Background(),
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(cfg.ServiceName),
-		),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create resource: %w", err)
+	// Initialize TracerProvider with config
+	if err := provider.initTracerProvider(cfg); err != nil {
+		return nil, fmt.Errorf("failed to initialize tracer provider: %w", err)
 	}
 
-	// Create TracerProvider
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SampleRate)),
-		sdktrace.WithResource(res),
-	)
-
-	// Set global tracer provider
-	otel.SetTracerProvider(tp)
-
+	// Get tracer from provider
+	tp := provider.getTracer()
 	tracer := tp.Tracer(cfg.ServiceName)
 	return &otelTracer{tracer: tracer, provider: tp}, nil
 }
 
 // NewOtelMeter creates an OpenTelemetry Meter from configuration.
+// It uses a shared provider to ensure consistent resource attributes across telemetry signals.
 func NewOtelMeter(config hyperion.Config) (hyperion.Meter, error) {
 	cfg, err := LoadMetricsConfig(config)
 	if err != nil {
@@ -65,41 +50,30 @@ func NewOtelMeter(config hyperion.Config) (hyperion.Meter, error) {
 		return hyperion.NewNoOpMeter(), nil
 	}
 
-	// Create metrics reader based on config
-	reader, err := createMetricsReader(cfg)
+	// Get or create shared provider
+	provider, err := getOrCreateProvider(cfg.ServiceName, cfg.Attributes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create metrics reader: %w", err)
+		return nil, fmt.Errorf("failed to initialize provider: %w", err)
 	}
 
-	// Create resource with service name
-	res, err := resource.New(context.Background(),
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(cfg.ServiceName),
-		),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create resource: %w", err)
+	// Initialize MeterProvider with config
+	if err := provider.initMeterProvider(cfg); err != nil {
+		return nil, fmt.Errorf("failed to initialize meter provider: %w", err)
 	}
 
-	// Create MeterProvider
-	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(reader),
-		sdkmetric.WithResource(res),
-	)
-
-	// Set global meter provider
-	otel.SetMeterProvider(mp)
-
+	// Get meter from provider
+	mp := provider.getMeter()
 	meter := mp.Meter(cfg.ServiceName)
 	return &otelMeter{meter: meter}, nil
 }
 
-// RegisterTracerShutdownHook registers a shutdown hook for the tracer.
-func RegisterTracerShutdownHook(lc fx.Lifecycle, tracer hyperion.Tracer) {
+// RegisterShutdownHook registers a shutdown hook for the global OTel provider.
+// This ensures graceful shutdown of both TracerProvider and MeterProvider.
+func RegisterShutdownHook(lc fx.Lifecycle) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			if otelTracer, ok := tracer.(*otelTracer); ok {
-				return otelTracer.Shutdown(ctx)
+			if globalProvider != nil {
+				return globalProvider.shutdown(ctx)
 			}
 			return nil
 		},
@@ -114,7 +88,6 @@ var TracerModule = fx.Module("hyperion.adapter.otel.tracer",
 			fx.As(new(hyperion.Tracer)),
 		),
 	),
-	fx.Invoke(RegisterTracerShutdownHook),
 )
 
 // MeterModule provides OpenTelemetry Meter implementation.
@@ -127,5 +100,9 @@ var MeterModule = fx.Module("hyperion.adapter.otel.meter",
 	),
 )
 
-// Module provides both Tracer and Meter.
-var Module = fx.Options(TracerModule, MeterModule)
+// Module provides both Tracer and Meter with unified shutdown.
+var Module = fx.Options(
+	TracerModule,
+	MeterModule,
+	fx.Invoke(RegisterShutdownHook),
+)

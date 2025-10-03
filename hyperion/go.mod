@@ -13,3 +13,5 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 )
+
+replace go.yaml.in/yaml/v3 => gopkg.in/yaml.v3 v3.0.1

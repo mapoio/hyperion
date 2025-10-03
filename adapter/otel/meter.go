@@ -2,6 +2,7 @@ package otel
 
 import (
 	"github.com/mapoio/hyperion"
+
 	"go.opentelemetry.io/otel/metric"
 )
 

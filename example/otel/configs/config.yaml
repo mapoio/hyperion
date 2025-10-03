@@ -1,0 +1,42 @@
+app:
+  name: "hyperion-otel-example"
+  environment: "development"
+
+# Logging configuration (Zap)
+log:
+  level: "debug"
+  encoding: "json"
+  development: true
+  output: "stdout"
+  # OTLP logs export configuration
+  otlp:
+    enabled: true
+    endpoint: "localhost:4317"
+    service_name: "hyperion-otel-example"
+
+# OpenTelemetry Tracing configuration
+tracing:
+  enabled: true  # Re-enabled for testing trace context injection
+  service_name: "hyperion-otel-example"
+  exporter: "otlp"
+  endpoint: "localhost:4317"  # HyperDX local gRPC endpoint
+  sample_rate: 1.0
+  attributes:
+    environment: "development"
+    version: "1.0.0"
+
+# OpenTelemetry Metrics configuration
+metrics:
+  enabled: true
+  service_name: "hyperion-otel-example"
+  exporter: "prometheus"
+  interval: 10s
+  attributes:
+    environment: "development"
+
+# HTTP Server configuration
+server:
+  host: "localhost"
+  port: 8090
+  read_timeout: 10s
+  write_timeout: 10s
