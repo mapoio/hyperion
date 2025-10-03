@@ -15,7 +15,7 @@ import "go.uber.org/fx"
 // Example usage:
 //
 //	fx.New(
-//	    hyperion.CoreModule,       // Provides all no-op defaults
+//	    hyperion.CoreModule,       // Provides all no-op defaults + ContextFactory
 //	    zap.Module,                // Override Logger
 //	    otel.Module,               // Override Tracer
 //	    myapp.Module,
@@ -29,8 +29,8 @@ var CoreModule = fx.Module("hyperion.core",
 		DefaultConfigModule,
 		DefaultCacheModule,
 
-		// Infrastructure (will be implemented later)
-		// fx.Provide(NewUnitOfWork),
+		// Context infrastructure
+		ContextModule,
 	),
 )
 
@@ -54,7 +54,27 @@ var CoreModule = fx.Module("hyperion.core",
 //	).Run()
 var CoreWithoutDefaultsModule = fx.Module("hyperion.core.minimal",
 	fx.Options(
-	// Infrastructure only (will be implemented later)
-	// fx.Provide(NewUnitOfWork),
+		// Context infrastructure
+		ContextModule,
+	),
+)
+
+// ContextModule provides ContextFactory for dependency injection.
+// This module is automatically included in CoreModule.
+//
+// Example usage (standalone):
+//
+//	fx.New(
+//	    hyperion.ContextModule,
+//	    zap.Module,
+//	    gorm.Module,
+//	    myapp.Module,
+//	).Run()
+var ContextModule = fx.Module("hyperion.context",
+	fx.Provide(
+		// Provide ContextFactory (no decorator by default)
+		func(logger Logger, tracer Tracer, db Database) ContextFactory {
+			return NewContextFactory(logger, tracer, db)
+		},
 	),
 )

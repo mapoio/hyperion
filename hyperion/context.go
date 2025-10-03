@@ -1,3 +1,49 @@
+// Package hyperion provides a production-ready context implementation with
+// factory pattern, decorator support, and middleware infrastructure for
+// building scalable Go applications with clean AOP-style cross-cutting concerns.
+//
+// # Context Factory Pattern
+//
+// The ContextFactory enables clean dependency injection with fx:
+//
+//	type Handler struct {
+//	    factory hyperion.ContextFactory
+//	}
+//
+//	func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+//	    ctx := h.factory.New(r.Context())
+//	    ctx.Logger().Info("handling request")
+//	}
+//
+// # Decorator Pattern for AOP
+//
+// Decorators enable cross-cutting concerns without modifying core logic:
+//
+//	factory := hyperion.NewContextFactory(logger, tracer, db,
+//	    hyperion.WithLoggerDecorator(AddPrefixDecorator("[APP]")),
+//	    hyperion.WithExecutorDecorator(QueryLoggingDecorator(logger)),
+//	)
+//
+// # Middleware for Service Layer
+//
+// Middleware wraps service methods for logging, tracing, transactions:
+//
+//	middleware := hyperion.ChainMiddleware(
+//	    LoggingMiddleware,
+//	    TracingMiddleware,
+//	)
+//
+//	err := middleware(ctx, func(ctx hyperion.Context) error {
+//	    return service.DoWork(ctx)
+//	})
+//
+// # Immutability
+//
+// All helper functions (WithLogger, WithTracer, WithDB) return new contexts:
+//
+//	requestLogger := logger.With("requestID", requestID)
+//	requestCtx := hyperion.WithLogger(ctx, requestLogger)
+//	// Original ctx unchanged, requestCtx has new logger
 package hyperion
 
 import (
@@ -94,7 +140,13 @@ func (c *hyperionContext) WithDeadline(deadline time.Time) (Context, context.Can
 }
 
 // WithDB returns a new Context with the specified database executor.
+// This creates an immutable copy with the DB replaced.
 // This is used internally by UnitOfWork to inject transaction executors.
+//
+// Example:
+//
+//	txCtx := hyperion.WithDB(ctx, transactionExecutor)
+//	// txCtx has new DB, but same logger and tracer
 func WithDB(ctx Context, db Executor) Context {
 	hctx, ok := ctx.(*hyperionContext)
 	if !ok {
@@ -107,5 +159,49 @@ func WithDB(ctx Context, db Executor) Context {
 		logger:  hctx.logger,
 		db:      db, // Replace DB
 		tracer:  hctx.tracer,
+	}
+}
+
+// WithLogger returns a new Context with the specified logger.
+// This creates an immutable copy with the Logger replaced.
+//
+// Example:
+//
+//	requestLogger := logger.With("requestID", requestID)
+//	requestCtx := hyperion.WithLogger(ctx, requestLogger)
+func WithLogger(ctx Context, logger Logger) Context {
+	hctx, ok := ctx.(*hyperionContext)
+	if !ok {
+		// Fallback: create new context
+		return New(ctx, logger, ctx.DB(), ctx.Tracer())
+	}
+
+	return &hyperionContext{
+		Context: hctx.Context,
+		logger:  logger, // Replace Logger
+		db:      hctx.db,
+		tracer:  hctx.tracer,
+	}
+}
+
+// WithTracer returns a new Context with the specified tracer.
+// This creates an immutable copy with the Tracer replaced.
+//
+// Example:
+//
+//	customTracer := NewCustomTracer()
+//	tracedCtx := hyperion.WithTracer(ctx, customTracer)
+func WithTracer(ctx Context, tracer Tracer) Context {
+	hctx, ok := ctx.(*hyperionContext)
+	if !ok {
+		// Fallback: create new context
+		return New(ctx, ctx.Logger(), ctx.DB(), tracer)
+	}
+
+	return &hyperionContext{
+		Context: hctx.Context,
+		logger:  hctx.logger,
+		db:      hctx.db,
+		tracer:  tracer, // Replace Tracer
 	}
 }

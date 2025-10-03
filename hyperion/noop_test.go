@@ -374,4 +374,46 @@ func TestContext(t *testing.T) {
 		t.Error("WithDeadline should return a cancel function")
 	}
 	cancel()
+
+	// Test WithLogger
+	newLogger := hyperion.NewNoOpLogger()
+	loggerCtx := hyperion.WithLogger(ctx, newLogger)
+	if loggerCtx == nil {
+		t.Error("WithLogger should return a context")
+	}
+	if loggerCtx.Logger() != newLogger {
+		t.Error("WithLogger should replace logger")
+	}
+	// Verify immutability - new context should be different instance
+	if loggerCtx == ctx {
+		t.Error("WithLogger should return a new context instance")
+	}
+
+	// Test WithTracer
+	newTracer := hyperion.NewNoOpTracer()
+	tracerCtx := hyperion.WithTracer(ctx, newTracer)
+	if tracerCtx == nil {
+		t.Error("WithTracer should return a context")
+	}
+	if tracerCtx.Tracer() != newTracer {
+		t.Error("WithTracer should replace tracer")
+	}
+	// Verify immutability - new context should be different instance
+	if tracerCtx == ctx {
+		t.Error("WithTracer should return a new context instance")
+	}
+
+	// Test WithDB (already exists, verify immutability)
+	newDB := hyperion.NewNoOpDatabase().Executor()
+	dbCtx := hyperion.WithDB(ctx, newDB)
+	if dbCtx == nil {
+		t.Error("WithDB should return a context")
+	}
+	if dbCtx.DB() != newDB {
+		t.Error("WithDB should replace executor")
+	}
+	// Verify immutability - new context should be different instance
+	if dbCtx == ctx {
+		t.Error("WithDB should return a new context instance")
+	}
 }
