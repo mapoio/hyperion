@@ -12,21 +12,83 @@ import (
 type PaymentService struct {
 	fraudService        *FraudDetectionService
 	notificationService *NotificationService
+	// Metrics
+	paymentCounter  hyperion.Counter   // Total payments processed
+	paymentAmount   hyperion.Histogram // Payment amount distribution
+	paymentDuration hyperion.Histogram // Payment processing duration
+	refundCounter   hyperion.Counter   // Total refunds processed
+	refundDuration  hyperion.Histogram // Refund processing duration
 }
 
 // NewPaymentService creates a new PaymentService instance
 func NewPaymentService(
 	fraudService *FraudDetectionService,
 	notificationService *NotificationService,
+	meter hyperion.Meter,
 ) *PaymentService {
 	return &PaymentService{
 		fraudService:        fraudService,
 		notificationService: notificationService,
+		// Initialize metrics
+		paymentCounter: meter.Counter("payment.processed.total",
+			hyperion.WithMetricDescription("Total number of payments processed"),
+			hyperion.WithMetricUnit("1"),
+		),
+		paymentAmount: meter.Histogram("payment.amount",
+			hyperion.WithMetricDescription("Payment amount distribution"),
+			hyperion.WithMetricUnit("USD"),
+		),
+		paymentDuration: meter.Histogram("payment.processing.duration",
+			hyperion.WithMetricDescription("Payment processing duration in milliseconds"),
+			hyperion.WithMetricUnit("ms"),
+		),
+		refundCounter: meter.Counter("payment.refund.total",
+			hyperion.WithMetricDescription("Total number of refunds processed"),
+			hyperion.WithMetricUnit("1"),
+		),
+		refundDuration: meter.Histogram("payment.refund.duration",
+			hyperion.WithMetricDescription("Refund processing duration in milliseconds"),
+			hyperion.WithMetricUnit("ms"),
+		),
 	}
 }
 
 // ProcessPayment processes a payment (Level 2)
 func (s *PaymentService) ProcessPayment(hctx hyperion.Context, userID string, amount float64) (transactionID string, err error) {
+	// Track payment processing start time
+	startTime := time.Now()
+
+	defer func() {
+		// Record processing duration
+		duration := float64(time.Since(startTime).Milliseconds())
+		status := "success"
+		if err != nil {
+			status = "error"
+		}
+
+		s.paymentDuration.Record(hctx, duration,
+			hyperion.String("service", "payment"),
+			hyperion.String("operation", "process"),
+			hyperion.String("status", status),
+		)
+
+		// Record payment metrics on success
+		if err == nil {
+			s.paymentCounter.Add(hctx, 1,
+				hyperion.String("service", "payment"),
+				hyperion.String("status", "success"),
+			)
+			s.paymentAmount.Record(hctx, amount,
+				hyperion.String("service", "payment"),
+			)
+		} else {
+			s.paymentCounter.Add(hctx, 1,
+				hyperion.String("service", "payment"),
+				hyperion.String("status", "error"),
+			)
+		}
+	}()
+
 	hctx, end := hctx.UseIntercept("PaymentService", "ProcessPayment")
 	defer end(&err)
 
@@ -62,6 +124,30 @@ func (s *PaymentService) ProcessPayment(hctx hyperion.Context, userID string, am
 
 // RefundPayment refunds a payment (Level 2)
 func (s *PaymentService) RefundPayment(hctx hyperion.Context, transactionID string) (err error) {
+	// Track refund processing start time
+	startTime := time.Now()
+
+	defer func() {
+		// Record processing duration
+		duration := float64(time.Since(startTime).Milliseconds())
+		status := "success"
+		if err != nil {
+			status = "error"
+		}
+
+		s.refundDuration.Record(hctx, duration,
+			hyperion.String("service", "payment"),
+			hyperion.String("operation", "refund"),
+			hyperion.String("status", status),
+		)
+
+		// Record refund counter
+		s.refundCounter.Add(hctx, 1,
+			hyperion.String("service", "payment"),
+			hyperion.String("status", status),
+		)
+	}()
+
 	hctx, end := hctx.UseIntercept("PaymentService", "RefundPayment")
 	defer end(&err)
 

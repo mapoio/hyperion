@@ -24,33 +24,9 @@ func (ti *TracingInterceptor) Intercept(
 	ctx Context,
 	fullPath string,
 ) (Context, func(err *error), error) {
-	// Start a new span
-	newStdCtx, span := ti.tracer.Start(ctx, fullPath)
-
-	// Create a new hyperion.Context with the updated standard context
-	// We need to preserve all other fields (logger, db, tracer, meter, interceptors)
-	hctx, ok := ctx.(*hyperionContext)
-	if !ok {
-		// Fallback: create new context
-		newCtx := New(newStdCtx, ctx.Logger(), ctx.DB(), ctx.Tracer(), ctx.Meter())
-		end := func(errPtr *error) {
-			if errPtr != nil && *errPtr != nil {
-				span.RecordError(*errPtr)
-			}
-			span.End()
-		}
-		return newCtx, end, nil
-	}
-
-	// Create new context with updated standard context
-	newHyperionCtx := &hyperionContext{
-		Context:      newStdCtx,
-		logger:       hctx.logger,
-		tracer:       hctx.tracer,
-		db:           hctx.db,
-		meter:        hctx.meter,
-		interceptors: hctx.interceptors,
-	}
+	// Start a new span - tracer.Start already updates the context with span context
+	// and returns a properly configured hyperion.Context
+	newHctx, span := ti.tracer.Start(ctx, fullPath)
 
 	// Create end function that records errors and ends the span
 	end := func(errPtr *error) {
@@ -60,7 +36,7 @@ func (ti *TracingInterceptor) Intercept(
 		span.End()
 	}
 
-	return newHyperionCtx, end, nil
+	return newHctx, end, nil
 }
 
 // Order implements Interceptor.Order.

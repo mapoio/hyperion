@@ -24,8 +24,40 @@ func main() {
 		otel.Module, // Tracer + Meter
 		zap.Module,  // Logger with OTel trace context injection
 
-		// Enable TracingInterceptor for automatic span creation
-		hyperion.TracingInterceptorModule,
+		// Default implementations for missing dependencies
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpCache),
+
+		// Register TracingInterceptor as a direct dependency
+		fx.Provide(hyperion.NewTracingInterceptor),
+
+		// Register ContextFactory with DIRECT dependency on TracingInterceptor
+		// This ensures TracingInterceptor is created BEFORE ContextFactory
+		fx.Provide(
+			func(
+				logger hyperion.Logger,
+				tracer hyperion.Tracer,
+				db hyperion.Database,
+				meter hyperion.Meter,
+				tracingInterceptor *hyperion.TracingInterceptor,
+			) hyperion.ContextFactory {
+				// Convert TracingInterceptor to Interceptor interface
+				interceptors := []hyperion.Interceptor{tracingInterceptor}
+
+				// DEBUG: Log interceptor count
+				logger.Info("🔍 [DEBUG] ContextFactory provider called",
+					"interceptors_count", len(interceptors),
+				)
+
+				return hyperion.NewContextFactory(
+					logger,
+					tracer,
+					db,
+					meter,
+					hyperion.WithInterceptors(interceptors...),
+				)
+			},
+		),
 
 		// Business services
 		services.Module,
@@ -73,6 +105,10 @@ func RegisterRoutes(
 	router.POST("/api/orders", func(c *gin.Context) {
 		// ⭐ 关键：使用 ContextFactory 从 gin.Context 创建 hyperion.Context
 		hctx := factory.New(c.Request.Context())
+
+		// Create root span for the HTTP request
+		hctx, rootSpan := hctx.Tracer().Start(hctx, "POST /api/orders")
+		defer rootSpan.End()
 
 		// Parse request
 		var req struct {

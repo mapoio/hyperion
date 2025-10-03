@@ -17,7 +17,9 @@ type otelTracer struct {
 // Start creates a new span and returns a context with the span and the span itself.
 func (t *otelTracer) Start(hctx hyperion.Context, spanName string, opts ...hyperion.SpanOption) (hyperion.Context, hyperion.Span) {
 	otelOpts := convertSpanOpts(opts...)
-	stdCtx, span := t.tracer.Start(hctx, spanName, otelOpts...)
+	// Extract the underlying context.Context from hyperion.Context
+	// This is critical: OTel needs the standard context.Context to store span context
+	stdCtx, span := t.tracer.Start(context.Context(hctx), spanName, otelOpts...)
 
 	// Wrap the span
 	wrappedSpan := &otelSpan{span: span}
