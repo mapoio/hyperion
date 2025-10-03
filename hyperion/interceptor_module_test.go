@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	hyperion "github.com/mapoio/hyperion"
 	"go.uber.org/fx"
+
+	hyperion "github.com/mapoio/hyperion"
 )
 
 // TestCoreModule_NoInterceptorsByDefault verifies that CoreModule

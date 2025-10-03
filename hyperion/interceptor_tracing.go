@@ -1,5 +1,7 @@
 package hyperion
 
+const tracingInterceptorName = "tracing"
+
 // TracingInterceptor provides OpenTelemetry tracing for method calls.
 // It creates a span for each intercepted method and automatically records errors.
 type TracingInterceptor struct {
@@ -13,7 +15,7 @@ func NewTracingInterceptor(tracer Tracer) *TracingInterceptor {
 
 // Name implements Interceptor.Name.
 func (ti *TracingInterceptor) Name() string {
-	return "tracing"
+	return tracingInterceptorName
 }
 
 // Intercept implements Interceptor.Intercept.

@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 
-	hyperion "github.com/mapoio/hyperion"
 	"go.uber.org/fx"
+
+	hyperion "github.com/mapoio/hyperion"
 )
 
 // Example_interceptorBasicUsage demonstrates basic interceptor usage

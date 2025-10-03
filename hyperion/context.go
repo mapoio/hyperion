@@ -272,7 +272,7 @@ func WithTracer(ctx Context, tracer Tracer) Context {
 
 // UseIntercept implements Context.UseIntercept.
 // It applies registered interceptors based on the provided configuration.
-func (c *hyperionContext) UseIntercept(parts ...any) (Context, func(err *error)) {
+func (c *hyperionContext) UseIntercept(parts ...any) (ctx Context, endFunc func(err *error)) {
 	// Parse path and options
 	fullPath, opts := JoinPath(parts...)
 

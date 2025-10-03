@@ -2,6 +2,8 @@ package hyperion
 
 import "time"
 
+const loggingInterceptorName = "logging"
+
 // LoggingInterceptor provides structured logging for method calls.
 // It logs method start, completion, duration, and errors.
 type LoggingInterceptor struct {
@@ -15,7 +17,7 @@ func NewLoggingInterceptor(logger Logger) *LoggingInterceptor {
 
 // Name implements Interceptor.Name.
 func (li *LoggingInterceptor) Name() string {
-	return "logging"
+	return loggingInterceptorName
 }
 
 // Intercept implements Interceptor.Intercept.

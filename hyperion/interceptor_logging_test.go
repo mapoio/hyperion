@@ -43,8 +43,8 @@ func TestLoggingInterceptor_Name(t *testing.T) {
 	logger := &captureLogger{}
 	interceptor := NewLoggingInterceptor(logger)
 
-	if interceptor.Name() != "logging" {
-		t.Errorf("Name() = %q, want %q", interceptor.Name(), "logging")
+	if interceptor.Name() != loggingInterceptorName {
+		t.Errorf("Name() = %q, want %q", interceptor.Name(), loggingInterceptorName)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestLoggingInterceptor_Intercept_WithError(t *testing.T) {
 		}
 		if key == "error" {
 			foundError = true
-			if fields[i+1] != testErr {
+			if err, ok := fields[i+1].(error); !ok || !errors.Is(err, testErr) {
 				t.Errorf("Expected error=%v, got %v", testErr, fields[i+1])
 			}
 		}

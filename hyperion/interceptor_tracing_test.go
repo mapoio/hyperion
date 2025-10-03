@@ -9,7 +9,6 @@ import (
 
 // captureTracer captures tracer calls for testing.
 type captureTracer struct {
-	noopTracer
 	startCalls []traceStartCall
 	spans      []*captureSpan
 }
@@ -58,8 +57,8 @@ func TestTracingInterceptor_Name(t *testing.T) {
 	tracer := &captureTracer{}
 	interceptor := NewTracingInterceptor(tracer)
 
-	if interceptor.Name() != "tracing" {
-		t.Errorf("Name() = %q, want %q", interceptor.Name(), "tracing")
+	if interceptor.Name() != tracingInterceptorName {
+		t.Errorf("Name() = %q, want %q", interceptor.Name(), tracingInterceptorName)
 	}
 }
 
@@ -168,7 +167,7 @@ func TestTracingInterceptor_Intercept_WithError(t *testing.T) {
 		t.Errorf("Expected 1 recorded error, got %d", len(span.recordedErrors))
 	}
 
-	if span.recordedErrors[0] != testErr {
+	if !errors.Is(span.recordedErrors[0], testErr) {
 		t.Errorf("Expected error %v, got %v", testErr, span.recordedErrors[0])
 	}
 
@@ -305,11 +304,11 @@ type customContext struct {
 	meter  Meter
 }
 
-func (c *customContext) Logger() Logger   { return c.logger }
-func (c *customContext) DB() Executor     { return c.db }
-func (c *customContext) Tracer() Tracer   { return c.tracer }
-func (c *customContext) Meter() Meter     { return c.meter }
-func (c *customContext) UseIntercept(parts ...any) (Context, func(*error)) {
+func (c *customContext) Logger() Logger { return c.logger }
+func (c *customContext) DB() Executor   { return c.db }
+func (c *customContext) Tracer() Tracer { return c.tracer }
+func (c *customContext) Meter() Meter   { return c.meter }
+func (c *customContext) UseIntercept(parts ...any) (ctx Context, endFunc func(*error)) {
 	return c, func(*error) {}
 }
 func (c *customContext) WithTimeout(timeout time.Duration) (Context, context.CancelFunc) {

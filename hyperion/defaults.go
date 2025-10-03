@@ -48,7 +48,5 @@ var DefaultCacheModule = fx.Module("hyperion.default_cache",
 
 // DefaultMeterModule provides a default no-op Meter implementation.
 var DefaultMeterModule = fx.Module("hyperion.default_meter",
-	fx.Provide(func() Meter {
-		return NewNoOpMeter()
-	}),
+	fx.Provide(NewNoOpMeter),
 )
