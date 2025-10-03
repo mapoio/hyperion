@@ -26,6 +26,9 @@ hyperion/                          # Monorepo root
 │   ├── tracer.go                  # Tracer interface (OTel-compatible)
 │   ├── tracer_noop.go             # NoOp Tracer implementation
 │   │
+│   ├── metric.go                  # Meter interface (OTel-compatible)
+│   ├── metric_noop.go             # NoOp Meter implementation
+│   │
 │   ├── database.go                # Database + Executor interfaces
 │   ├── database_noop.go           # NoOp Database implementation
 │   │
@@ -35,7 +38,13 @@ hyperion/                          # Monorepo root
 │   ├── cache.go                   # Cache interface
 │   ├── cache_noop.go              # NoOp Cache implementation
 │   │
+│   ├── interceptor.go             # Interceptor interface
+│   ├── interceptor_tracing.go     # TracingInterceptor (built-in)
+│   ├── interceptor_logging.go     # LoggingInterceptor (built-in)
+│   ├── interceptor_test.go        # Interceptor tests
+│   │
 │   ├── context.go                 # Context interface (type-safe)
+│   ├── context_impl.go            # Default Context implementation
 │   ├── defaults.go                # Default modules (NoOp providers)
 │   ├── module.go                  # CoreModule definitions
 │   └── hyperion_test.go           # Core tests
@@ -49,22 +58,27 @@ hyperion/                          # Monorepo root
     │   ├── module.go              # fx.Module export
     │   └── provider_test.go       # Unit tests
     │
-    ├── zap/                       # 🔜 Logger Adapter (Planned)
+    ├── zap/                       # ✅ Logger Adapter (Implemented)
     │   ├── go.mod
     │   ├── logger.go              # Zap-based Logger
+    │   ├── otel_bridge.go         # OTel Logs Bridge for trace correlation
     │   ├── module.go
     │   └── logger_test.go
     │
-    ├── otel/                      # 🔜 Tracer Adapter (Planned)
+    ├── otel/                      # 🔜 Tracer + Meter Adapter (Planned)
     │   ├── go.mod
-    │   ├── tracer.go              # OpenTelemetry integration
+    │   ├── tracer.go              # OpenTelemetry Tracer integration
+    │   ├── meter.go               # OpenTelemetry Meter integration
+    │   ├── exemplar.go            # Exemplar support for trace correlation
     │   ├── module.go
-    │   └── tracer_test.go
+    │   ├── tracer_test.go
+    │   └── meter_test.go
     │
-    ├── gorm/                      # 🔜 Database Adapter (Planned)
+    ├── gorm/                      # ✅ Database Adapter (Implemented)
     │   ├── go.mod
     │   ├── database.go            # GORM integration
     │   ├── unit_of_work.go        # Transaction management
+    │   ├── config.go              # Configuration handling
     │   ├── module.go
     │   └── database_test.go
     │

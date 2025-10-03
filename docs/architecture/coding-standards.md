@@ -293,10 +293,20 @@ type Context interface {
 Always pass `hyperion.Context` as the first parameter:
 
 ```go
-// Service layer
-func (s *UserService) GetByID(ctx hyperion.Context, id string) (*User, error) {
-    // Access dependencies through accessors
-    _, span := ctx.Tracer().Start(ctx, "UserService.GetByID")
+// Service layer - Use Interceptor Pattern (recommended)
+func (s *UserService) GetByID(ctx hyperion.Context, id string) (_ *User, err error) {
+    // 3-Line Interceptor Pattern for automatic tracing, logging, and metrics
+    ctx, end := ctx.UseIntercept("UserService", "GetByID")
+    defer end(&err)
+
+    ctx.Logger().Info("fetching user", "user_id", id)
+
+    return s.userRepo.FindByID(ctx, id)
+}
+
+// Alternative: Manual tracing (only when you need fine-grained control)
+func (s *UserService) GetByIDManual(ctx hyperion.Context, id string) (*User, error) {
+    _, span := ctx.Tracer().Start(ctx, "UserService.GetByIDManual")
     defer span.End()
 
     ctx.Logger().Info("fetching user", "user_id", id)
@@ -336,6 +346,60 @@ func (s *Service) DoWork(ctx hyperion.Context) error {
     return nil
 }
 ```
+
+### Interceptor Pattern (3-Line Pattern)
+
+**Recommended for Service Layer**: Use the 3-line interceptor pattern for automatic observability:
+
+```go
+// Good - 3-Line Interceptor Pattern
+func (s *UserService) CreateUser(ctx hyperion.Context, req CreateUserRequest) (_ *User, err error) {
+    // Line 1: Start interceptor chain
+    ctx, end := ctx.UseIntercept("UserService", "CreateUser")
+    // Line 2: Defer cleanup (MUST pass error pointer)
+    defer end(&err)
+
+    // Line 3+: Your business logic
+    ctx.Logger().Info("creating user", "email", req.Email)
+
+    // Record metrics
+    counter := ctx.Meter().Counter("user.operations")
+    counter.Add(ctx, 1, hyperion.String("operation", "create"))
+
+    user, err := s.userRepo.Save(ctx, &User{...})
+    if err != nil {
+        return nil, fmt.Errorf("failed to create user: %w", err)
+    }
+
+    return user, nil
+}
+
+// Bad - Missing named error return
+func (s *UserService) CreateUser(ctx hyperion.Context, req CreateUserRequest) (*User, error) {
+    ctx, end := ctx.UseIntercept("UserService", "CreateUser")
+    defer end(&err)  // ❌ 'err' is not defined as named return
+    // ...
+}
+
+// Bad - Not passing error pointer
+func (s *UserService) CreateUser(ctx hyperion.Context, req CreateUserRequest) (_ *User, err error) {
+    ctx, end := ctx.UseIntercept("UserService", "CreateUser")
+    defer end(nil)  // ❌ Should be end(&err)
+    // ...
+}
+```
+
+**Key Requirements**:
+1. **Named Error Return**: Use `err error` or `_ *Type, err error` in return signature
+2. **Error Pointer**: Pass `&err` to `end()` function for automatic error recording
+3. **Service Layer Only**: Apply to service methods, not repository methods (too granular)
+
+**What You Get Automatically**:
+- ✅ Distributed trace span created and ended
+- ✅ Method entry/exit logs with trace context
+- ✅ Metrics recorded with duration and status
+- ✅ Automatic error recording in traces
+- ✅ TraceID/SpanID correlation across logs and metrics
 
 ---
 
@@ -643,12 +707,14 @@ Hyperion follows the [AngularJS Commit Message Convention](https://github.com/an
 **Core Library**:
 - `core`: Core interfaces and types
 - `context`: Context abstraction
+- `interceptor`: Interceptor pattern and built-in interceptors
+- `meter`: Meter interface and metrics
 - `module`: Module system
 
 **Adapters**:
 - `adapter/viper`: Viper config adapter
 - `adapter/zap`: Zap logger adapter
-- `adapter/otel`: OpenTelemetry tracer adapter
+- `adapter/otel`: OpenTelemetry tracer and meter adapter
 - `adapter/gorm`: GORM database adapter
 
 **Documentation**:

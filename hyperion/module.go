@@ -5,19 +5,26 @@ import "go.uber.org/fx"
 // CoreModule is the default Hyperion module with all no-op implementations.
 // This is the RECOMMENDED module for most applications.
 //
+// CoreModule includes:
+//   - All no-op default implementations (Logger, Tracer, Database, Config, Cache, Meter)
+//   - ContextFactory with interceptor infrastructure
+//   - InterceptorsModule (base infrastructure, no interceptors registered)
+//
 // Adapters will automatically override no-op implementations when provided:
 //   - adapter/zap.Module overrides Logger
-//   - adapter/otel.Module overrides Tracer
+//   - adapter/otel.Module overrides Tracer and Meter
 //   - adapter/gorm.Module overrides Database
 //   - adapter/viper.Module overrides Config
 //   - adapter/redis.Module overrides Cache
 //
-// Example usage:
+// To enable built-in interceptors, add them separately:
 //
 //	fx.New(
-//	    hyperion.CoreModule,       // Provides all no-op defaults + ContextFactory
-//	    zap.Module,                // Override Logger
-//	    otel.Module,               // Override Tracer
+//	    hyperion.CoreModule,                  // Core infrastructure
+//	    hyperion.TracingInterceptorModule,    // Optional: enable tracing
+//	    hyperion.LoggingInterceptorModule,    // Optional: enable logging
+//	    zap.Module,                           // Override Logger
+//	    otel.Module,                          // Override Tracer and Meter
 //	    myapp.Module,
 //	).Run()
 var CoreModule = fx.Module("hyperion.core",
@@ -28,9 +35,11 @@ var CoreModule = fx.Module("hyperion.core",
 		DefaultDatabaseModule,
 		DefaultConfigModule,
 		DefaultCacheModule,
+		DefaultMeterModule,
 
-		// Context infrastructure
+		// Context infrastructure with interceptor support
 		ContextModule,
+		InterceptorsModule, // Base infrastructure (no interceptors registered)
 	),
 )
 
@@ -54,13 +63,17 @@ var CoreModule = fx.Module("hyperion.core",
 //	).Run()
 var CoreWithoutDefaultsModule = fx.Module("hyperion.core.minimal",
 	fx.Options(
-		// Context infrastructure
+		// Context infrastructure with interceptor support
 		ContextModule,
+		InterceptorsModule, // Base infrastructure (no interceptors registered)
 	),
 )
 
 // ContextModule provides ContextFactory for dependency injection.
 // This module is automatically included in CoreModule.
+//
+// The ContextFactory will automatically inject interceptors from the
+// "hyperion.interceptors" fx group if any are registered.
 //
 // Example usage (standalone):
 //
@@ -68,13 +81,28 @@ var CoreWithoutDefaultsModule = fx.Module("hyperion.core.minimal",
 //	    hyperion.ContextModule,
 //	    zap.Module,
 //	    gorm.Module,
+//	    otel.Module,
 //	    myapp.Module,
 //	).Run()
 var ContextModule = fx.Module("hyperion.context",
 	fx.Provide(
-		// Provide ContextFactory (no decorator by default)
-		func(logger Logger, tracer Tracer, db Database) ContextFactory {
-			return NewContextFactory(logger, tracer, db)
+		// Provide ContextFactory with interceptors from group
+		// If no interceptors are registered, the slice will be empty
+		func(params struct {
+			fx.In
+			Logger       Logger
+			Tracer       Tracer
+			DB           Database
+			Meter        Meter
+			Interceptors []Interceptor `group:"hyperion.interceptors"`
+		}) ContextFactory {
+			return NewContextFactory(
+				params.Logger,
+				params.Tracer,
+				params.DB,
+				params.Meter,
+				WithInterceptors(params.Interceptors...),
+			)
 		},
 	),
 )

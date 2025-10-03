@@ -1,49 +1,65 @@
-# Epic 3: Observability Stack (v2.2)
+# Epic 3: OpenTelemetry Integration (Planned)
 
-**Version**: 2.2
-**Status**: 🔜 **PLANNED** (February 2026)
-**Duration**: 4 weeks
+**Version**: Post-v2.2
+**Status**: 🔜 **PLANNED** (Q1 2026)
+**Duration**: 3 weeks
 **Priority**: ⭐⭐⭐⭐
 
 ---
 
 ## Overview
 
-Implement production-grade **observability adapters** for Tracing (OpenTelemetry), Caching (Ristretto/Redis), and Metrics (Prometheus), enabling comprehensive application monitoring and performance optimization while maintaining zero lock-in.
+Implement **real OpenTelemetry adapter** providing actual distributed tracing and metrics collection with automatic correlation. This builds on the Interceptor pattern and Meter interface already completed in v2.0-2.2.
+
+**Current State (v2.0-2.2 - ✅ Completed)**:
+- ✅ Interceptor pattern (`ctx.UseIntercept()`) for automatic observability
+- ✅ Core interfaces: `hyperion.Tracer`, `hyperion.Meter` (OTel-compatible)
+- ✅ Built-in interceptors: `TracingInterceptor`, `LoggingInterceptor`
+- ✅ NoOp implementations (zero overhead by default)
+- ✅ Zap adapter with OTel Logs Bridge for trace correlation
+
+**What's Missing**:
+- Real OpenTelemetry SDK integration for actual span export
+- Real metrics collection with exemplar support
+- Exporters: Jaeger, Prometheus, OTLP
+- Sampling strategies and configuration
 
 ---
 
 ## Goals
 
 ### Primary Goals
-1. OpenTelemetry tracing with distributed context propagation
-2. High-performance in-memory caching (Ristretto)
-3. Distributed caching with Redis
-4. Prometheus metrics integration
-5. Complete observability example application
+1. **OpenTelemetry Tracer Adapter**: Real distributed tracing with span export
+2. **OpenTelemetry Meter Adapter**: Real metrics collection with exemplar support
+3. **Automatic Trace Correlation**: Logs → Traces → Metrics via OTel Logs Bridge
+4. **Exporters**: Jaeger, Prometheus, OTLP integration
+5. **Complete Observability Example**: Multi-service application with full OTel stack
 
 ### Success Criteria
 - [ ] OpenTelemetry adapter passes all Tracer interface tests
-- [ ] Ristretto adapter achieves >90% cache hit rate in benchmarks
-- [ ] Redis adapter supports TTL, eviction, and clustering
-- [ ] Prometheus metrics expose framework and business metrics
-- [ ] Example application demonstrates full observability stack
-- [ ] Performance overhead < 3% vs native libraries
+- [ ] OpenTelemetry adapter passes all Meter interface tests
+- [ ] Automatic exemplar support linking metrics to traces
+- [ ] OTel Logs Bridge automatically extracts TraceID from context
+- [ ] Exporters work with Jaeger, Prometheus, and OTLP
+- [ ] Example application demonstrates full observability correlation
+- [ ] Performance overhead < 5% vs NoOp implementations
 
 ---
 
 ## Deliverables
 
-### 1. OpenTelemetry Tracer Adapter 🔜
+### 1. OpenTelemetry Tracer + Meter Adapter 🔜
 
 **Package**: `adapter/otel/`
 
 **Scope**:
-- Implement `hyperion.Tracer` interface using OpenTelemetry
-- Implement `hyperion.Span` interface (OTel-compatible)
-- Support multiple exporters (Jaeger, Zipkin, OTLP)
-- Distributed context propagation
-- Automatic span attributes from Context
+- Implement `hyperion.Tracer` interface using OpenTelemetry SDK
+- Implement `hyperion.Meter` interface using OpenTelemetry SDK
+- Implement `hyperion.Span`, `hyperion.Counter`, `hyperion.Histogram`, etc.
+- Support multiple exporters (Jaeger for traces, Prometheus for metrics, OTLP for both)
+- Distributed context propagation (W3C Trace Context)
+- **Automatic exemplar support**: Metrics include trace samples
+- **OTel Logs Bridge integration**: Logs automatically include TraceID/SpanID
 - Configuration integration via `hyperion.Config`
 
 **Interface Implementation**:
@@ -104,14 +120,58 @@ tracing:
     version: v1.0.0
 ```
 
-**Context Integration**:
+**Meter Implementation** (New):
 ```go
-func (s *UserService) GetUser(ctx hyperion.Context, id string) (*User, error) {
-    // Automatic distributed tracing
+type otelMeter struct {
+    meter metric.Meter
+}
+
+func (m *otelMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion.Counter {
+    config := buildMetricConfig(opts...)
+    counter, _ := m.meter.Int64Counter(name,
+        metric.WithDescription(config.Description),
+        metric.WithUnit(config.Unit),
+    )
+    return &otelCounter{counter: counter}
+}
+
+type otelCounter struct {
+    counter metric.Int64Counter
+}
+
+func (c *otelCounter) Add(ctx context.Context, value int64, attrs ...hyperion.Attribute) {
+    // Automatic exemplar support - links metric to current trace
+    c.counter.Add(ctx, value, convertAttributes(attrs)...)
+}
+```
+
+**Context Integration with Interceptor** (Recommended):
+```go
+func (s *UserService) GetUser(ctx hyperion.Context, id string) (_ *User, err error) {
+    // 3-Line Interceptor Pattern - Automatic tracing, logging, and metrics
+    ctx, end := ctx.UseIntercept("UserService", "GetUser")
+    defer end(&err)
+
+    // Business logic with manual metrics
+    counter := ctx.Meter().Counter("user.lookups")
+    counter.Add(ctx, 1, hyperion.String("method", "GetUser"))
+
+    user, err := s.userRepo.FindByID(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+
+    return user, nil
+}
+```
+
+**Alternative: Manual Tracing** (Fine-grained control):
+```go
+func (s *UserService) GetUserManual(ctx hyperion.Context, id string) (*User, error) {
     ctx, span := ctx.Tracer().Start(ctx, "UserService.GetUser")
     defer span.End()
 
-    span.SetAttributes("user.id", id)
+    span.SetAttributes(hyperion.String("user.id", id))
 
     user, err := s.userRepo.FindByID(ctx, id)
     if err != nil {
@@ -119,26 +179,212 @@ func (s *UserService) GetUser(ctx hyperion.Context, id string) (*User, error) {
         return nil, err
     }
 
-    span.SetAttributes("user.found", true)
+    span.SetAttributes(hyperion.Bool("user.found", true))
     return user, nil
 }
 ```
 
 **Tasks**:
-- [ ] Implement otelTracer struct (2 days)
-- [ ] Implement otelSpan wrapper (1 day)
-- [ ] Add exporter support (Jaeger, Zipkin, OTLP) (2 days)
-- [ ] Integrate with Config (1 day)
-- [ ] Add context propagation helpers (1 day)
+- [ ] Implement otelTracer struct and otelSpan wrapper (2 days)
+- [ ] Implement otelMeter struct (Counter, Histogram, Gauge, UpDownCounter) (2 days)
+- [ ] Add trace exporters (Jaeger, Zipkin, OTLP) (1 day)
+- [ ] Add metrics exporters (Prometheus, OTLP) (1 day)
+- [ ] Implement automatic exemplar support (link metrics to traces) (1 day)
+- [ ] Integrate with Config for tracer and meter (1 day)
+- [ ] Add W3C Trace Context propagation (1 day)
+- [ ] Add OTel Logs Bridge for automatic log correlation (1 day)
 - [ ] Write unit tests (>80% coverage) (1 day)
 - [ ] Write integration tests (real exporters) (1 day)
 - [ ] Documentation and examples (1 day)
 
-**Timeline**: 7 working days
+**Timeline**: 10 working days (~2 weeks)
 
 ---
 
-### 2. Ristretto Cache Adapter 🔜
+### 2. Observability Example Application 🔜
+
+**Package**: `examples/observability-demo/`
+
+**Scope**:
+- Multi-service application demonstrating full OpenTelemetry integration
+- Distributed tracing across services
+- Metrics with exemplar support
+- Logs with automatic trace correlation
+- Docker Compose setup (Jaeger, Prometheus, Grafana)
+
+**Features**:
+- Multi-service architecture (API Gateway + User Service + Order Service)
+- 3-Line Interceptor Pattern for automatic observability
+- Distributed tracing with W3C Trace Context propagation
+- Custom business metrics with automatic trace exemplars
+- Logs automatically include TraceID and SpanID
+- Complete observability stack setup
+
+**Architecture**:
+```
+API Gateway (Port 8080)
+    ├── Traces: Jaeger (via OTLP)
+    ├── Metrics: Prometheus
+    ├── Logs: stdout with trace context
+    └── Routes to:
+        ├── User Service (Port 8081)
+        │   └── Database: PostgreSQL
+        └── Order Service (Port 8082)
+            └── Database: PostgreSQL
+
+Observability Stack:
+    ├── Jaeger UI (Port 16686)       # Distributed traces
+    ├── Prometheus (Port 9090)       # Metrics with exemplars
+    └── Grafana (Port 3000)          # Unified dashboards
+```
+
+**Example Service Code**:
+```go
+// User Service with full OpenTelemetry integration
+type UserService struct {
+    userRepo hyperion.Repository
+    uow      hyperion.UnitOfWork
+}
+
+func (s *UserService) GetUser(ctx hyperion.Context, id string) (_ *User, err error) {
+    // 3-Line Interceptor Pattern
+    ctx, end := ctx.UseIntercept("UserService", "GetUser")
+    defer end(&err)
+
+    // Log automatically includes TraceID and SpanID
+    ctx.Logger().Info("fetching user", "user_id", id)
+
+    // Metric automatically includes exemplar linking to current trace
+    lookupCounter := ctx.Meter().Counter("user.lookups")
+    lookupCounter.Add(ctx, 1, hyperion.String("method", "GetUser"))
+
+    // Database query
+    user, err := s.userRepo.FindByID(ctx, id)
+    if err != nil {
+        ctx.Logger().Error("user not found", "user_id", id, "error", err)
+        return nil, err
+    }
+
+    return user, nil
+}
+```
+
+**Docker Compose**:
+```yaml
+version: '3.8'
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # UI
+      - "4318:4318"    # OTLP HTTP receiver
+      - "4317:4317"    # OTLP gRPC receiver
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--enable-feature=exemplar-storage'  # Enable exemplar support
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - PROMETHEUS_ENDPOINT=:9090
+
+  user-service:
+    build: ./services/user-service
+    ports:
+      - "8081:8081"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - POSTGRES_DSN=postgres://postgres:postgres@postgres:5432/users
+
+  order-service:
+    build: ./services/order-service
+    ports:
+      - "8082:8082"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - POSTGRES_DSN=postgres://postgres:postgres@postgres:5432/orders
+```
+
+**Observability Correlation Flow**:
+```
+1. User request → API Gateway
+   ├── TracingInterceptor creates root span with TraceID
+   └── Context contains TraceID + SpanID
+
+2. API Gateway → User Service (HTTP call)
+   ├── W3C Trace Context propagated via HTTP headers
+   └── User Service continues same trace
+
+3. User Service business logic
+   ├── Logger.Info() → includes TraceID + SpanID (via OTel Logs Bridge)
+   ├── Meter.Counter.Add() → includes exemplar with TraceID + SpanID
+   └── Tracer creates child span
+
+4. Observability Backends
+   ├── Jaeger: Shows distributed trace across services
+   ├── Prometheus: Metrics with exemplars linking to Jaeger traces
+   └── Logs: Include TraceID for correlation with traces
+```
+
+**Tasks**:
+- [ ] Set up multi-service architecture (2 days)
+- [ ] Implement distributed tracing with W3C propagation (1 day)
+- [ ] Add business metrics with exemplar support (1 day)
+- [ ] Configure OTel Logs Bridge for log correlation (1 day)
+- [ ] Create Docker Compose setup (1 day)
+- [ ] Add Grafana dashboards showing trace-metric correlation (1 day)
+- [ ] Write deployment guide (1 day)
+- [ ] Add README with usage instructions (1 day)
+
+**Timeline**: 6 working days
+
+---
+
+### 3. Caching Adapters 🔜 (Moved to Future Epic)
+
+**Note**: Cache adapters (Ristretto, Redis) have been moved to a future Epic focused on performance optimization. Epic 3 focuses exclusively on OpenTelemetry integration for observability.
+
+**Deferred to**: Epic 6 or later (TBD)
+
+---
+
+### OLD SECTION (Cache Adapters) - REMOVED
+
+The following sections have been removed from Epic 3 and deferred to a future Epic:
+- ~~Ristretto Cache Adapter~~
+- ~~Redis Cache Adapter~~
+- ~~Prometheus Metrics Integration~~ (Replaced by OTel Meter with Prometheus exporter)
+
+---
+
+### 2. (REMOVED - See Section 3) Ristretto Cache Adapter 🔜
 
 **Package**: `adapter/ristretto/`
 
@@ -642,27 +888,20 @@ services:
 
 ## Implementation Timeline
 
-### Week 1: Tracing Adapter (1 week)
-- Days 1-2: Core OpenTelemetry implementation
-- Days 3-4: Exporter support and configuration
-- Days 5-7: Testing and documentation
+### Week 1-2: OpenTelemetry Adapter (2 weeks)
+- Days 1-2: Implement otelTracer and otelSpan
+- Days 3-4: Implement otelMeter (Counter, Histogram, Gauge, UpDownCounter)
+- Days 5-6: Add exporters (Jaeger, Prometheus, OTLP)
+- Days 7-8: Implement automatic exemplar support
+- Day 9: Add W3C Trace Context propagation
+- Day 10: Testing and documentation
 
-### Week 2: Cache Adapters (1.5 weeks)
-- Days 1-3: Ristretto adapter (implementation + tests)
-- Days 4-6: Redis adapter (standalone)
-- Days 7-8: Redis cluster/sentinel support
+### Week 3: Example Application & Integration (1 week)
+- Days 1-3: Build multi-service observability demo
+- Days 4-5: Integration testing with real exporters
+- Days 6-7: Docker Compose setup and Grafana dashboards
 
-### Week 3: Metrics & Example App (1 week)
-- Days 1-2: Prometheus metrics integration
-- Days 3-6: Observability example application
-- Day 7: Docker Compose and documentation
-
-### Week 4: Integration & Release (0.5 week)
-- Days 1-3: Integration testing
-- Day 4: Final testing and bug fixes
-- Day 5: Release v2.2
-
-**Total**: 4 weeks
+**Total**: 3 weeks (~15 working days)
 
 ---
 
@@ -670,22 +909,25 @@ services:
 
 ### Challenge 1: Distributed Context Propagation
 **Problem**: Ensure trace context propagates correctly across service boundaries
-**Solution**: Use OpenTelemetry's built-in propagators (W3C Trace Context)
+**Solution**: Use OpenTelemetry's built-in W3C Trace Context propagators
 **Status**: Planned
 
-### Challenge 2: Cache Stampede Prevention
-**Problem**: Multiple goroutines requesting same cache key simultaneously
-**Solution**: Implement singleflight pattern in cache adapters
+### Challenge 2: Automatic Exemplar Support
+**Problem**: Link metrics to traces automatically without manual TraceID extraction
+**Solution**: Use OpenTelemetry SDK's automatic exemplar support via context
 **Status**: Planned
 
-### Challenge 3: Redis Connection Pooling
-**Problem**: Optimize Redis connection usage
-**Solution**: Use go-redis with tuned pool settings, health checks
-**Status**: Planned
+### Challenge 3: OTel Logs Bridge Integration
+**Problem**: Ensure logs automatically include TraceID and SpanID
+**Solution**: Use OTel Logs Bridge API to extract trace context from `context.Context`
+**Status**: Planned (Zap adapter already has bridge code, needs OTel SDK integration)
 
 ### Challenge 4: Metric Cardinality Explosion
-**Problem**: Too many label combinations causing high memory usage
-**Solution**: Limit label values, use metric aggregation
+**Problem**: Too many label combinations causing high memory usage in Prometheus
+**Solution**:
+- Limit attribute cardinality in metric definitions
+- Use aggregation strategies
+- Document best practices for metric labels
 **Status**: Planned
 
 ---
@@ -693,24 +935,29 @@ services:
 ## Success Metrics
 
 ### Code Metrics
-- Test coverage: >= 80% for all adapters
-- Performance overhead: < 3% vs native libraries
-- Lines of code: ~800 LOC (otel), ~600 LOC (ristretto), ~800 LOC (redis), ~400 LOC (prometheus)
+- Test coverage: >= 80% for OTel adapter
+- Performance overhead: < 5% vs NoOp implementations
+- Lines of code: ~1000 LOC (otel tracer + meter + exporters)
 
 ### Quality Metrics
 - golangci-lint: Zero errors
-- Integration tests: All passing
-- Example app: Fully functional observability stack
+- Integration tests: All passing with real exporters (Jaeger, Prometheus)
+- Example app: Demonstrates full trace-metric-log correlation
 
 ### Performance Benchmarks
-- Ristretto cache: >90% hit rate, <100ns per operation
-- Redis cache: <5ms p99 latency (local network)
-- Tracing overhead: <1ms per span
+- Tracing overhead: <1ms per span creation
+- Metrics overhead: <100ns per metric operation (with exemplars)
+- Context propagation: <50ns overhead
+
+### Observability Metrics
+- **Trace Correlation**: 100% of logs include TraceID when using Interceptor pattern
+- **Metric Exemplars**: 100% of metric samples link to traces automatically
+- **Cross-Service Traces**: Successfully propagate across 3+ microservices
 
 ### Community Metrics (Target)
-- Production users: 20+ by end of v2.2
-- GitHub stars: 500+
-- Community adapters: 2+
+- Production users: 15+ by Q2 2026
+- GitHub stars: 600+
+- Documentation examples: 5+ complete scenarios
 
 ---
 
@@ -733,7 +980,7 @@ services:
 
 ---
 
-**Epic Status**: 🔜 **PLANNED** (February 2026)
+**Epic Status**: 🔜 **PLANNED** (Q1 2026)
 
-**Last Updated**: October 2025
-**Version**: 2.2 Planning
+**Last Updated**: October 2025 (Updated)
+**Version**: Post-v2.2 Planning

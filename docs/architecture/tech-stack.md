@@ -97,36 +97,53 @@ Specific implementations (Viper, Zap, GORM, etc.)
 
 ---
 
-### Tracing: OpenTelemetry (adapter/otel)
+### Observability: OpenTelemetry (adapter/otel)
 
-**Status**: 🔜 Planned
+**Status**: 🔜 Planned for full integration (Epic 3, Q1 2026)
+**Current**: ✅ Core interfaces implemented (Tracer, Meter), NoOp defaults available
 
 **Why OpenTelemetry?**
 - Industry-standard observability framework
-- Vendor-neutral (works with Jaeger, Zipkin, etc.)
+- Vendor-neutral (works with Jaeger, Zipkin, Prometheus, etc.)
 - Comprehensive SDK with auto-instrumentation
 - Active CNCF project with strong community
 - Built-in support for traces, metrics, and logs
+- **Automatic correlation** between all three pillars
 
 **Alternatives Considered:**
 - **OpenTracing**: Deprecated in favor of OpenTelemetry
-- **Jaeger Client**: Vendor-specific
-- Custom tracing: Reinventing the wheel
+- **Jaeger Client**: Vendor-specific, traces only
+- **Prometheus Client**: Metrics only, no trace correlation
+- Custom observability: Reinventing the wheel
 
 **Core Design**:
 - Core library provides OTel-compatible interfaces WITHOUT depending on OTel
 - Adapter wraps actual OpenTelemetry SDK
+- **Interceptor Pattern**: Automatic tracing, logging, and metrics via `ctx.UseIntercept()`
+- **Automatic Correlation**: TraceID and SpanID shared across logs, traces, and metrics
 
-**Planned Implementation**:
+**Current Implementation (v2.0-2.2)**:
+- **Interfaces**: `hyperion.Tracer`, `hyperion.Meter` (OTel-compatible)
+- **Built-in Interceptors**: `TracingInterceptor`, `LoggingInterceptor`
+- **NoOp Defaults**: Zero overhead when OTel adapter not installed
+- **Zap Logger**: OTel Logs Bridge for automatic trace context
+
+**Planned Full OTel Integration (Epic 3)**:
 - **Package**: `github.com/mapoio/hyperion/adapter/otel`
-- **Implements**: `hyperion.Tracer`
+- **Implements**: `hyperion.Tracer` + `hyperion.Meter`
 - **Dependencies**: `go.opentelemetry.io/otel v1.24.0`
+- **Features**:
+  - Real distributed tracing with span export
+  - Real metrics collection with exemplar support
+  - Automatic trace correlation for logs (via OTel Logs Bridge)
+  - Exporters: Jaeger, Prometheus, OTLP
+  - Sampling strategies configuration
 
 ---
 
 ### ORM: GORM (adapter/gorm)
 
-**Status**: 🔜 Planned
+**Status**: ✅ Implemented (v2.0-2.2)
 
 **Why GORM?**
 - Most popular Go ORM with comprehensive features
@@ -144,9 +161,10 @@ Specific implementations (Viper, Zap, GORM, etc.)
 - Core library provides generic `Database` and `Executor` interfaces
 - NOT tied to GORM specifically - can implement with sqlx, ent, etc.
 
-**Planned Implementation**:
+**Implementation**:
 - **Package**: `github.com/mapoio/hyperion/adapter/gorm`
-- **Implements**: `hyperion.Database` and `hyperion.UnitOfWork`
+- **Implements**: `hyperion.Database`, `hyperion.Executor`, and `hyperion.UnitOfWork`
+- **Test Coverage**: 82.1%
 - **Dependencies**: `gorm.io/gorm v1.25.0`
 
 ---
@@ -357,10 +375,13 @@ The core `hyperion.Database` interface is database-agnostic.
 
 ### Observability
 
-- **Tracing**: OpenTelemetry-compatible (adapter/otel)
-- **Metrics**: Prometheus-compatible (planned v2.2)
-- **Logging**: Structured JSON logs (adapter/zap)
-- **Health Checks**: Kubernetes-ready endpoints (planned)
+- **Tracing**: OpenTelemetry-compatible Tracer interface (✅ v2.0-2.2, NoOp default)
+- **Metrics**: OpenTelemetry-compatible Meter interface (✅ v2.0-2.2, NoOp default)
+- **Logging**: Structured JSON logs with trace correlation (✅ adapter/zap, 93.9% coverage)
+- **Interceptor Pattern**: Automatic observability via `ctx.UseIntercept()` (✅ v2.0-2.2)
+- **Automatic Correlation**: TraceID/SpanID shared across logs, traces, metrics (✅ v2.0-2.2)
+- **Full OTel Integration**: Real exporters for Jaeger, Prometheus, OTLP (🔜 Epic 3, Q1 2026)
+- **Health Checks**: Kubernetes-ready endpoints (🔜 planned)
 
 ### Configuration
 

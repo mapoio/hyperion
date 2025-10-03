@@ -33,7 +33,9 @@ Hyperion is a **zero lock-in** Go backend framework built on the **core-adapter 
 
 - ✅ **Zero Lock-In**: Core interfaces with NoOp implementations, swap adapters at will
 - ✅ **Modular Architecture**: All features delivered as independent `fx.Module` packages
-- ✅ **Type-Safe Context**: `hyperion.Context` with integrated tracing, logging, and database access
+- ✅ **Type-Safe Context**: `hyperion.Context` with integrated tracing, logging, metrics, and database access
+- ✅ **Interceptor Pattern**: 3-line pattern for automatic tracing, logging, and metrics
+- ✅ **Unified Observability**: Automatic correlation between Logs, Traces, and Metrics via OpenTelemetry
 - ✅ **Production-Ready Adapters**: Viper (config), Zap (logging), GORM (database) with 80%+ test coverage
 - ✅ **Declarative Transactions**: UnitOfWork pattern with automatic commit/rollback and panic recovery
 - ✅ **Hot Configuration Reload**: Viper-based config with file watching support
@@ -118,14 +120,23 @@ For a complete CRUD application example with HTTP server, see the [Quick Start G
 ```
 hyperion/                          # Monorepo root
 ├── go.work                        # Go workspace definition
+├── QUICK_START.md                 # Quick start guide
+├── docs/                          # 📚 Documentation
+│   ├── interceptor.md             # Interceptor pattern guide
+│   ├── observability.md           # Observability guide
+│   └── architecture.md            # Architecture documentation
+│
 ├── hyperion/                      # 🎯 Core (zero dependencies)
 │   ├── go.mod                     # Only depends on: go.uber.org/fx
+│   ├── README.md                  # Core library documentation
 │   ├── logger.go                  # Logger interface
 │   ├── config.go                  # Config interface
 │   ├── database.go                # Database interface
 │   ├── tracer.go                  # Tracer interface
+│   ├── metric.go                  # Meter interface
 │   ├── cache.go                   # Cache interface
-│   └── context.go                 # Context interface
+│   ├── context.go                 # Context interface
+│   └── interceptor.go             # Interceptor interface
 │
 └── adapter/                       # 🔌 Adapters (independent modules)
     ├── viper/                     # ✅ Config adapter (Implemented)
@@ -159,7 +170,9 @@ hyperion/                          # Monorepo root
 | `Database` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Database access with GORM |
 | `Executor` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Query execution with transaction tracking |
 | `UnitOfWork` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Declarative transaction management |
-| `Tracer` | 🔜 Planned | `adapter/otel` | OpenTelemetry tracing |
+| `Tracer` | ✅ Implemented | [hyperion/tracer.go](hyperion/tracer.go) | Distributed tracing (NoOp default) |
+| `Meter` | ✅ Implemented | [hyperion/metric.go](hyperion/metric.go) | Metrics collection (NoOp default) |
+| `Interceptor` | ✅ Implemented | [hyperion/interceptor.go](hyperion/interceptor.go) | Cross-cutting concerns pattern |
 | `Cache` | 🔜 Planned | `adapter/ristretto` | In-memory caching |
 | `Context` | ✅ Implemented | [hyperion/context.go](hyperion/context.go) | Type-safe request context |
 
@@ -181,13 +194,20 @@ For detailed design rationale, see [Architecture Decisions](docs/architecture-de
 ## 📚 Documentation
 
 ### Core Documentation
+- **[Quick Start Guide](QUICK_START.md)**: 5-minute tutorial with complete CRUD example
+- **[Hyperion Core README](hyperion/README.md)**: Core library overview and usage patterns
+- **[Interceptor Guide](docs/interceptor.md)**: Complete interceptor pattern documentation
+- **[Observability Guide](docs/observability.md)**: Unified observability with Logs, Traces, and Metrics
 - **[Architecture Guide](docs/architecture.md)**: Comprehensive framework design document
-- **[Quick Start](docs/quick-start.md)**: 10-minute tutorial with complete CRUD example
 - **[Coding Standards](docs/architecture/coding-standards.md)**: Development guidelines and best practices
 - **[Tech Stack](docs/architecture/tech-stack.md)**: Technology choices and rationale
 - **[Source Tree Guide](docs/architecture/source-tree.md)**: Navigate the codebase
 - **[Architecture Decisions](docs/architecture-decisions.md)**: ADRs explaining key design choices
 - **[Implementation Plan](docs/implementation-plan.md)**: Development roadmap
+
+### Design Documents
+- **[Interceptor Architecture](.design/interceptor-architecture.md)**: Deep dive into interceptor pattern design
+- **[Observability Architecture](.design/observability-architecture.md)**: Deep dive into observability correlation design
 
 ### Adapter Documentation
 - **[Adapter Overview](docs/adapters)**: Complete guide to all official adapters
@@ -336,12 +356,15 @@ hyperion/                          # Monorepo root
 │
 ├── hyperion/                      # 🎯 Core library
 │   ├── go.mod                     # Minimal deps (fx only)
+│   ├── README.md                  # Core library documentation
 │   ├── logger.go                  # Logger interface + NoOp
 │   ├── config.go                  # Config interface + NoOp
 │   ├── database.go                # Database interface + NoOp
 │   ├── tracer.go                  # Tracer interface + NoOp
+│   ├── metric.go                  # Meter interface + NoOp
 │   ├── cache.go                   # Cache interface + NoOp
 │   ├── context.go                 # Context interface
+│   ├── interceptor.go             # Interceptor interface
 │   ├── module.go                  # CoreModule definition
 │   └── defaults.go                # Default NoOp providers
 │
