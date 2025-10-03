@@ -1,5 +1,6 @@
 package otel
 
+
 import (
 	"context"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
 
 func TestOtelTracer_Start(t *testing.T) {
 	// Create an in-memory span exporter for testing
@@ -28,7 +30,7 @@ func TestOtelTracer_Start(t *testing.T) {
 
 	// Test basic span creation
 	t.Run("creates span successfully", func(t *testing.T) {
-		newCtx, span := tracer.Start(ctx, "test-span")
+		newCtx, span := tracer.Start(wrapContext(ctx), "test-span")
 
 		if span == nil {
 			t.Fatal("expected non-nil span")
@@ -77,7 +79,7 @@ func TestOtelTracer_StartWithAttributes(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("creates span with attributes", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-span-with-attrs")
+		_, span := tracer.Start(wrapContext(ctx), "test-span-with-attrs")
 
 		// Set attributes after creation
 		span.SetAttributes(
@@ -125,7 +127,7 @@ func TestOtelSpan_RecordError(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("records error on span", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-error-span")
+		_, span := tracer.Start(wrapContext(ctx), "test-error-span")
 
 		// Record an error
 		testErr := context.DeadlineExceeded
@@ -174,7 +176,7 @@ func TestOtelSpan_AddEvent(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("adds event to span", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-event-span")
+		_, span := tracer.Start(wrapContext(ctx), "test-event-span")
 
 		// Add an event
 		span.AddEvent("test-event")
@@ -222,7 +224,7 @@ func TestOtelSpanContext(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns valid span context", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-span-context")
+		_, span := tracer.Start(wrapContext(ctx), "test-span-context")
 
 		spanCtx := span.SpanContext()
 

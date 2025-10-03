@@ -15,10 +15,12 @@ type otelTracer struct {
 }
 
 // Start creates a new span and returns a context with the span and the span itself.
-func (t *otelTracer) Start(ctx context.Context, spanName string, opts ...hyperion.SpanOption) (context.Context, hyperion.Span) {
+func (t *otelTracer) Start(hctx hyperion.Context, spanName string, opts ...hyperion.SpanOption) (hyperion.Context, hyperion.Span) {
 	otelOpts := convertSpanOpts(opts...)
-	ctx, span := t.tracer.Start(ctx, spanName, otelOpts...)
-	return ctx, &otelSpan{span: span}
+	stdCtx, span := t.tracer.Start(hctx, spanName, otelOpts...)
+	// Wrap the new standard context back into hyperion.Context
+	newHctx := hyperion.WithContext(hctx, stdCtx)
+	return newHctx, &otelSpan{span: span}
 }
 
 // Shutdown flushes any pending traces and shuts down the tracer provider.

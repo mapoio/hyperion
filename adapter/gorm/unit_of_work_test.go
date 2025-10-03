@@ -27,7 +27,7 @@ func (m *mockLogger) Sync() error                         { return nil }
 // mockTracer implements hyperion.Tracer for testing.
 type mockTracer struct{}
 
-func (m *mockTracer) Start(ctx context.Context, spanName string, opts ...hyperion.SpanOption) (context.Context, hyperion.Span) {
+func (m *mockTracer) Start(ctx hyperion.Context, spanName string, opts ...hyperion.SpanOption) (hyperion.Context, hyperion.Span) {
 	return ctx, &mockSpan{}
 }
 

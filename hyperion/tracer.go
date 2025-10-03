@@ -1,7 +1,6 @@
 package hyperion
 
 import (
-	"context"
 	"time"
 )
 
@@ -9,7 +8,7 @@ import (
 // It follows OpenTelemetry semantics but doesn't depend on it.
 type Tracer interface {
 	// Start creates a new span and returns a new context with the span.
-	Start(ctx context.Context, spanName string, opts ...SpanOption) (context.Context, Span)
+	Start(ctx Context, spanName string, opts ...SpanOption) (Context, Span)
 }
 
 // Span represents a single span in a trace.

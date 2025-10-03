@@ -14,11 +14,11 @@ type captureTracer struct {
 }
 
 type traceStartCall struct {
-	ctx      context.Context
+	ctx      Context
 	spanName string
 }
 
-func (c *captureTracer) Start(ctx context.Context, spanName string, opts ...SpanOption) (context.Context, Span) {
+func (c *captureTracer) Start(ctx Context, spanName string, opts ...SpanOption) (Context, Span) {
 	c.startCalls = append(c.startCalls, traceStartCall{ctx: ctx, spanName: spanName})
 	span := &captureSpan{}
 	c.spans = append(c.spans, span)

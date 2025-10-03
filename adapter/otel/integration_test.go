@@ -1,5 +1,6 @@
 package otel
 
+
 import (
 	"bytes"
 	"context"
@@ -10,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
+
 
 // TestTracerLoggerIntegration tests that trace context is properly propagated to logs.
 // This verifies that when using a Tracer to create spans, the trace_id and span_id
@@ -35,7 +37,7 @@ func TestTracerLoggerIntegration(t *testing.T) {
 		ctx := context.Background()
 
 		// Start a span using the tracer
-		newCtx, span := tracer.Start(ctx, "test-operation")
+		newCtx, span := tracer.Start(wrapContext(ctx), "test-operation")
 
 		// Verify span is not nil
 		if span == nil {
@@ -117,7 +119,7 @@ func TestTraceContextExtraction(t *testing.T) {
 		ctx := context.Background()
 
 		// Start a span
-		newCtx, span := tracer.Start(ctx, "logged-operation")
+		newCtx, span := tracer.Start(wrapContext(ctx), "logged-operation")
 
 		// Simulate logger extracting trace context using OTel API
 		extractedSpan := oteltrace.SpanFromContext(newCtx)
@@ -192,7 +194,7 @@ func TestMultipleSpansTraceContext(t *testing.T) {
 		ctx := context.Background()
 
 		// Start parent span
-		parentCtx, parentSpan := tracer.Start(ctx, "parent-operation")
+		parentCtx, parentSpan := tracer.Start(wrapContext(ctx), "parent-operation")
 		parentSpanCtx := parentSpan.SpanContext()
 
 		// Start child span

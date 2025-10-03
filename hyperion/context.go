@@ -270,6 +270,31 @@ func WithTracer(ctx Context, tracer Tracer) Context {
 	}
 }
 
+// WithContext returns a new hyperion.Context with the underlying context.Context replaced.
+// This is useful when a tracer or other component returns a new standard context
+// (e.g., with trace context) and you need to wrap it back into hyperion.Context.
+//
+// Example:
+//
+//	stdCtx, span := otelTracer.Start(hctx, "operation")
+//	newHctx := hyperion.WithContext(hctx, stdCtx)
+func WithContext(ctx Context, stdCtx context.Context) Context {
+	hctx, ok := ctx.(*hyperionContext)
+	if !ok {
+		// Fallback: create new context
+		return New(stdCtx, ctx.Logger(), ctx.DB(), ctx.Tracer(), ctx.Meter())
+	}
+
+	return &hyperionContext{
+		Context:      stdCtx, // Replace underlying context
+		logger:       hctx.logger,
+		db:           hctx.db,
+		tracer:       hctx.tracer,
+		meter:        hctx.meter,
+		interceptors: hctx.interceptors,
+	}
+}
+
 // UseIntercept implements Context.UseIntercept.
 // It applies registered interceptors based on the provided configuration.
 func (c *hyperionContext) UseIntercept(parts ...any) (ctx Context, endFunc func(err *error)) {

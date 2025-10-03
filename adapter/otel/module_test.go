@@ -1,5 +1,6 @@
 package otel
 
+
 import (
 	"context"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
+
 
 func TestNewOtelTracer(t *testing.T) {
 	tests := []struct {
@@ -68,7 +70,7 @@ func TestNewOtelTracer(t *testing.T) {
 
 				// Test basic functionality
 				ctx := context.Background()
-				_, span := tracer.Start(ctx, "test-span")
+				_, span := tracer.Start(wrapContext(ctx), "test-span")
 				if span == nil {
 					t.Error("expected non-nil span")
 				}
@@ -221,7 +223,7 @@ func TestTracerModule(t *testing.T) {
 
 		// Test basic functionality
 		ctx := context.Background()
-		_, span := tracer.Start(ctx, "test-span")
+		_, span := tracer.Start(wrapContext(ctx), "test-span")
 		if span == nil {
 			t.Error("expected non-nil span")
 		}

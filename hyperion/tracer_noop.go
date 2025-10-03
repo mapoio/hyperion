@@ -1,7 +1,5 @@
 package hyperion
 
-import "context"
-
 // noopTracer is a no-op implementation of Tracer interface.
 type noopTracer struct{}
 
@@ -10,7 +8,7 @@ func NewNoOpTracer() Tracer {
 	return &noopTracer{}
 }
 
-func (t *noopTracer) Start(ctx context.Context, spanName string, opts ...SpanOption) (context.Context, Span) {
+func (t *noopTracer) Start(ctx Context, spanName string, opts ...SpanOption) (Context, Span) {
 	return ctx, &noopSpan{}
 }
 
