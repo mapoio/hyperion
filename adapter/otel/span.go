@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mapoio/hyperion"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"

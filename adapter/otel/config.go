@@ -7,6 +7,13 @@ import (
 	"github.com/mapoio/hyperion"
 )
 
+const (
+	// Exporter type constants
+	exporterJaeger     = "jaeger"
+	exporterOTLP       = "otlp"
+	exporterPrometheus = "prometheus"
+)
+
 // TracingConfig defines the configuration for OpenTelemetry tracing.
 type TracingConfig struct {
 	// Enabled indicates whether tracing is enabled.
@@ -56,7 +63,7 @@ func LoadTracingConfig(config hyperion.Config) (TracingConfig, error) {
 	// Set defaults
 	cfg.Enabled = true
 	cfg.SampleRate = 1.0
-	cfg.Exporter = "jaeger"
+	cfg.Exporter = exporterJaeger
 
 	// Load from config
 	if err := config.Unmarshal("tracing", &cfg); err != nil {
@@ -78,7 +85,7 @@ func LoadMetricsConfig(config hyperion.Config) (MetricsConfig, error) {
 	// Set defaults
 	cfg.Enabled = true
 	cfg.Interval = 10 * time.Second
-	cfg.Exporter = "prometheus"
+	cfg.Exporter = exporterPrometheus
 
 	// Load from config
 	if err := config.Unmarshal("metrics", &cfg); err != nil {
@@ -103,7 +110,7 @@ func validateTracingConfig(cfg TracingConfig) error {
 		return fmt.Errorf("tracing.service_name is required when tracing is enabled")
 	}
 
-	if cfg.Exporter != "jaeger" && cfg.Exporter != "otlp" {
+	if cfg.Exporter != exporterJaeger && cfg.Exporter != exporterOTLP {
 		return fmt.Errorf("tracing.exporter must be 'jaeger' or 'otlp', got %q", cfg.Exporter)
 	}
 
@@ -128,11 +135,11 @@ func validateMetricsConfig(cfg MetricsConfig) error {
 		return fmt.Errorf("metrics.service_name is required when metrics are enabled")
 	}
 
-	if cfg.Exporter != "prometheus" && cfg.Exporter != "otlp" {
+	if cfg.Exporter != exporterPrometheus && cfg.Exporter != exporterOTLP {
 		return fmt.Errorf("metrics.exporter must be 'prometheus' or 'otlp', got %q", cfg.Exporter)
 	}
 
-	if cfg.Exporter == "otlp" && cfg.Endpoint == "" {
+	if cfg.Exporter == exporterOTLP && cfg.Endpoint == "" {
 		return fmt.Errorf("metrics.endpoint is required when using OTLP exporter")
 	}
 
