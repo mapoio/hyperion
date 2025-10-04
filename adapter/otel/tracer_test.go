@@ -19,7 +19,7 @@ func TestOtelTracer_Start(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -28,7 +28,7 @@ func TestOtelTracer_Start(t *testing.T) {
 
 	// Test basic span creation
 	t.Run("creates span successfully", func(t *testing.T) {
-		newCtx, span := tracer.Start(ctx, "test-span")
+		newCtx, span := tracer.Start(wrapContext(ctx), "test-span")
 
 		if span == nil {
 			t.Fatal("expected non-nil span")
@@ -69,7 +69,7 @@ func TestOtelTracer_StartWithAttributes(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -77,7 +77,7 @@ func TestOtelTracer_StartWithAttributes(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("creates span with attributes", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-span-with-attrs")
+		_, span := tracer.Start(wrapContext(ctx), "test-span-with-attrs")
 
 		// Set attributes after creation
 		span.SetAttributes(
@@ -117,7 +117,7 @@ func TestOtelSpan_RecordError(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -125,7 +125,7 @@ func TestOtelSpan_RecordError(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("records error on span", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-error-span")
+		_, span := tracer.Start(wrapContext(ctx), "test-error-span")
 
 		// Record an error
 		testErr := context.DeadlineExceeded
@@ -166,7 +166,7 @@ func TestOtelSpan_AddEvent(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -174,7 +174,7 @@ func TestOtelSpan_AddEvent(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("adds event to span", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-event-span")
+		_, span := tracer.Start(wrapContext(ctx), "test-event-span")
 
 		// Add an event
 		span.AddEvent("test-event")
@@ -214,7 +214,7 @@ func TestOtelSpanContext(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -222,7 +222,7 @@ func TestOtelSpanContext(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns valid span context", func(t *testing.T) {
-		_, span := tracer.Start(ctx, "test-span-context")
+		_, span := tracer.Start(wrapContext(ctx), "test-span-context")
 
 		spanCtx := span.SpanContext()
 
@@ -258,7 +258,7 @@ func TestOtelTracer_Shutdown(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}

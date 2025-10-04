@@ -6,13 +6,25 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// otelMeter wraps an OpenTelemetry meter to implement hyperion.Meter.
-type otelMeter struct {
-	meter metric.Meter
+// OtelMeter wraps an OpenTelemetry meter to implement hyperion.Meter.
+// It is exported to allow applications to access the underlying MeterProvider
+// for integrating OTel auto-instrumentation libraries.
+//
+//nolint:revive // Name is intentional to distinguish from hyperion.Meter interface
+type OtelMeter struct {
+	meter    metric.Meter
+	provider metric.MeterProvider
+}
+
+// MeterProvider returns the underlying OpenTelemetry MeterProvider.
+// This allows applications to integrate OTel runtime instrumentation libraries
+// (e.g., runtime metrics) that require access to the MeterProvider.
+func (m *OtelMeter) MeterProvider() metric.MeterProvider {
+	return m.provider
 }
 
 // Counter creates or retrieves a counter instrument.
-func (m *otelMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion.Counter {
+func (m *OtelMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion.Counter {
 	// For now, create without options - we'll add option support later
 	counter, err := m.meter.Int64Counter(name)
 	if err != nil {
@@ -24,7 +36,7 @@ func (m *otelMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion
 }
 
 // Histogram creates or retrieves a histogram instrument.
-func (m *otelMeter) Histogram(name string, opts ...hyperion.MetricOption) hyperion.Histogram {
+func (m *OtelMeter) Histogram(name string, opts ...hyperion.MetricOption) hyperion.Histogram {
 	histogram, err := m.meter.Float64Histogram(name)
 	if err != nil {
 		return &otelHistogram{histogram: histogram}
@@ -33,7 +45,7 @@ func (m *otelMeter) Histogram(name string, opts ...hyperion.MetricOption) hyperi
 }
 
 // Gauge creates or retrieves a gauge instrument.
-func (m *otelMeter) Gauge(name string, opts ...hyperion.MetricOption) hyperion.Gauge {
+func (m *OtelMeter) Gauge(name string, opts ...hyperion.MetricOption) hyperion.Gauge {
 	// Use histogram for synchronous gauge-like behavior
 	histogram, err := m.meter.Float64Histogram(name)
 	if err != nil {
@@ -43,7 +55,7 @@ func (m *otelMeter) Gauge(name string, opts ...hyperion.MetricOption) hyperion.G
 }
 
 // UpDownCounter creates or retrieves an up-down counter.
-func (m *otelMeter) UpDownCounter(name string, opts ...hyperion.MetricOption) hyperion.UpDownCounter {
+func (m *OtelMeter) UpDownCounter(name string, opts ...hyperion.MetricOption) hyperion.UpDownCounter {
 	counter, err := m.meter.Int64UpDownCounter(name)
 	if err != nil {
 		return &otelUpDownCounter{counter: counter}

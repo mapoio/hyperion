@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -36,8 +37,19 @@ func createMetricsReader(cfg MetricsConfig) (metric.Reader, error) {
 	case exporterPrometheus:
 		return prometheus.New()
 	case exporterOTLP:
-		// TODO: Implement OTLP metrics exporter
-		return nil, fmt.Errorf("OTLP metrics exporter not yet implemented")
+		// Create OTLP gRPC metrics exporter
+		exporter, err := otlpmetricgrpc.New(context.Background(),
+			otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
+			otlpmetricgrpc.WithInsecure(), // TODO: Add TLS configuration
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OTLP metrics exporter: %w", err)
+		}
+
+		// Create periodic reader with the specified interval
+		return metric.NewPeriodicReader(exporter,
+			metric.WithInterval(cfg.Interval),
+		), nil
 	default:
 		return nil, fmt.Errorf("unsupported metrics exporter: %s", cfg.Exporter)
 	}

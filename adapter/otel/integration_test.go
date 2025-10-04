@@ -26,7 +26,7 @@ func TestTracerLoggerIntegration(t *testing.T) {
 		trace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test-integration"),
 		provider: tp,
 	}
@@ -35,7 +35,7 @@ func TestTracerLoggerIntegration(t *testing.T) {
 		ctx := context.Background()
 
 		// Start a span using the tracer
-		newCtx, span := tracer.Start(ctx, "test-operation")
+		newCtx, span := tracer.Start(wrapContext(ctx), "test-operation")
 
 		// Verify span is not nil
 		if span == nil {
@@ -108,7 +108,7 @@ func TestTraceContextExtraction(t *testing.T) {
 		trace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test-extraction"),
 		provider: tp,
 	}
@@ -117,7 +117,7 @@ func TestTraceContextExtraction(t *testing.T) {
 		ctx := context.Background()
 
 		// Start a span
-		newCtx, span := tracer.Start(ctx, "logged-operation")
+		newCtx, span := tracer.Start(wrapContext(ctx), "logged-operation")
 
 		// Simulate logger extracting trace context using OTel API
 		extractedSpan := oteltrace.SpanFromContext(newCtx)
@@ -183,7 +183,7 @@ func TestMultipleSpansTraceContext(t *testing.T) {
 		trace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test-multi-span"),
 		provider: tp,
 	}
@@ -192,7 +192,7 @@ func TestMultipleSpansTraceContext(t *testing.T) {
 		ctx := context.Background()
 
 		// Start parent span
-		parentCtx, parentSpan := tracer.Start(ctx, "parent-operation")
+		parentCtx, parentSpan := tracer.Start(wrapContext(ctx), "parent-operation")
 		parentSpanCtx := parentSpan.SpanContext()
 
 		// Start child span

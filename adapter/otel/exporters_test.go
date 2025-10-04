@@ -3,8 +3,10 @@ package otel
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/sdk/metric"
 )
 
 func TestCreateTraceExporter(t *testing.T) {
@@ -78,13 +80,14 @@ func TestCreateMetricsReader(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "otlp reader (not implemented)",
+			name: "otlp reader",
 			cfg: MetricsConfig{
 				Exporter: "otlp",
 				Endpoint: "localhost:4317",
+				Interval: 10 * time.Second,
 			},
 			wantType: "otlp",
-			wantErr:  true, // OTLP metrics not yet implemented
+			wantErr:  false, // OTLP metrics now implemented
 		},
 		{
 			name: "unsupported exporter",
@@ -113,9 +116,19 @@ func TestCreateMetricsReader(t *testing.T) {
 					if _, ok := reader.(*prometheus.Exporter); !ok {
 						t.Errorf("expected prometheus.Exporter, got %T", reader)
 					}
+				} else if tt.wantType == "otlp" {
+					if _, ok := reader.(*metric.PeriodicReader); !ok {
+						t.Errorf("expected metric.PeriodicReader, got %T", reader)
+					}
 				}
 
-				// Clean up - readers don't have Shutdown method, they're closed via MeterProvider
+				// Clean up - shutdown reader if it's a PeriodicReader
+				if pr, ok := reader.(*metric.PeriodicReader); ok {
+					ctx := context.Background()
+					if err := pr.Shutdown(ctx); err != nil {
+						t.Logf("failed to shutdown periodic reader: %v", err)
+					}
+				}
 			}
 		})
 	}

@@ -54,6 +54,11 @@ func NewContextFactory(logger Logger, tracer Tracer, db Database, meter Meter, o
 		opt(f)
 	}
 
+	// DEBUG: Log final interceptor count after options applied
+	logger.Info("🔍 [DEBUG] NewContextFactory created",
+		"final_interceptors", len(f.interceptors),
+	)
+
 	return f
 }
 

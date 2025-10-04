@@ -1,6 +1,7 @@
 package gorm
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,6 +23,9 @@ const (
 	DriverMySQL = "mysql"
 	// DriverSQLite represents the SQLite driver.
 	DriverSQLite = "sqlite"
+
+	// Log level constants
+	logLevelWarn = "warn"
 )
 
 // Config represents the database configuration.
@@ -72,7 +76,7 @@ func DefaultConfig() *Config {
 		MaxIdleConns:           5,
 		ConnMaxLifetime:        5 * time.Minute,
 		ConnMaxIdleTime:        10 * time.Minute,
-		LogLevel:               "warn",
+		LogLevel:               logLevelWarn,
 		SlowThreshold:          200 * time.Millisecond,
 		SkipDefaultTransaction: &skipDefaultTransaction,
 		PrepareStmt:            &prepareStmt,
@@ -171,7 +175,8 @@ func (c *Config) Validate() error {
 
 	if err := validate.Struct(c); err != nil {
 		// Return validation error with field details
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+		var validationErrors validator.ValidationErrors
+		if errors.As(err, &validationErrors) {
 			// Format first validation error for better user experience
 			firstErr := validationErrors[0]
 			return fmt.Errorf("validation failed for field '%s': %s (value: '%v')",
@@ -276,7 +281,7 @@ func (c *Config) getLogger() logger.Interface {
 		logLevel = logger.Silent
 	case "error":
 		logLevel = logger.Error
-	case "warn":
+	case logLevelWarn:
 		logLevel = logger.Warn
 	case "info":
 		logLevel = logger.Info

@@ -6,6 +6,8 @@ import (
 
 	"github.com/mapoio/hyperion"
 
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 )
 
@@ -35,7 +37,24 @@ func NewOtelTracer(config hyperion.Config) (hyperion.Tracer, error) {
 	// Get tracer from provider
 	tp := provider.getTracer()
 	tracer := tp.Tracer(cfg.ServiceName)
-	return &otelTracer{tracer: tracer, provider: tp}, nil
+	return &OtelTracer{tracer: tracer, provider: tp}, nil
+}
+
+// NewOtelTracerFromProvider creates a hyperion.Tracer from an external TracerProvider.
+// This allows applications to fully control OTel SDK initialization and version,
+// while still using Hyperion's tracing abstractions.
+//
+// Example usage:
+//
+//	fx.Provide(func(tp trace.TracerProvider) hyperion.Tracer {
+//	    return otel.NewOtelTracerFromProvider(tp, "my-service")
+//	})
+func NewOtelTracerFromProvider(provider trace.TracerProvider, serviceName string) hyperion.Tracer {
+	tracer := provider.Tracer(serviceName)
+	return &OtelTracer{
+		tracer:   tracer,
+		provider: provider,
+	}
 }
 
 // NewOtelMeter creates an OpenTelemetry Meter from configuration.
@@ -64,7 +83,24 @@ func NewOtelMeter(config hyperion.Config) (hyperion.Meter, error) {
 	// Get meter from provider
 	mp := provider.getMeter()
 	meter := mp.Meter(cfg.ServiceName)
-	return &otelMeter{meter: meter}, nil
+	return &OtelMeter{meter: meter, provider: mp}, nil
+}
+
+// NewOtelMeterFromProvider creates a hyperion.Meter from an external MeterProvider.
+// This allows applications to fully control OTel SDK initialization and version,
+// while still using Hyperion's metrics abstractions.
+//
+// Example usage:
+//
+//	fx.Provide(func(mp metric.MeterProvider) hyperion.Meter {
+//	    return otel.NewOtelMeterFromProvider(mp, "my-service")
+//	})
+func NewOtelMeterFromProvider(provider metric.MeterProvider, serviceName string) hyperion.Meter {
+	meter := provider.Meter(serviceName)
+	return &OtelMeter{
+		meter:    meter,
+		provider: provider,
+	}
 }
 
 // RegisterShutdownHook registers a shutdown hook for the global OTel provider.

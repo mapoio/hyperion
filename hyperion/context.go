@@ -79,6 +79,11 @@ type Context interface {
 	// with traces via exemplars, enabling metrics → traces navigation.
 	Meter() Meter
 
+	// Span returns the current span from this context.
+	// If no span is active, returns a no-op span.
+	// This enables accessing span operations without re-calling tracer.Start().
+	Span() Span
+
 	// WithTimeout returns a copy of the context with the specified timeout.
 	WithTimeout(timeout time.Duration) (Context, context.CancelFunc)
 
@@ -145,6 +150,7 @@ type hyperionContext struct {
 	db           Executor
 	tracer       Tracer
 	meter        Meter
+	span         Span          // Current active span (nil if no span)
 	interceptors []Interceptor // Global interceptors from fx (can be empty)
 }
 
@@ -169,8 +175,16 @@ func (c *hyperionContext) Meter() Meter {
 	return c.meter
 }
 
+func (c *hyperionContext) Span() Span {
+	if c.span != nil {
+		return c.span
+	}
+	// Return no-op span if no span is active
+	return &noopSpan{}
+}
+
 // withContext is a helper method to create a new hyperionContext with a different underlying context.
-// It preserves all the other fields (logger, db, tracer, meter, interceptors) from the current context.
+// It preserves all the other fields (logger, db, tracer, meter, span, interceptors) from the current context.
 func (c *hyperionContext) withContext(ctx context.Context) *hyperionContext {
 	return &hyperionContext{
 		Context:      ctx,
@@ -178,6 +192,7 @@ func (c *hyperionContext) withContext(ctx context.Context) *hyperionContext {
 		db:           c.db,
 		tracer:       c.tracer,
 		meter:        c.meter,
+		span:         c.span,
 		interceptors: c.interceptors,
 	}
 }
@@ -218,6 +233,7 @@ func WithDB(ctx Context, db Executor) Context {
 		db:           db, // Replace DB
 		tracer:       hctx.tracer,
 		meter:        hctx.meter,
+		span:         hctx.span,
 		interceptors: hctx.interceptors,
 	}
 }
@@ -242,6 +258,7 @@ func WithLogger(ctx Context, logger Logger) Context {
 		db:           hctx.db,
 		tracer:       hctx.tracer,
 		meter:        hctx.meter,
+		span:         hctx.span,
 		interceptors: hctx.interceptors,
 	}
 }
@@ -266,6 +283,64 @@ func WithTracer(ctx Context, tracer Tracer) Context {
 		db:           hctx.db,
 		tracer:       tracer, // Replace Tracer
 		meter:        hctx.meter,
+		span:         hctx.span,
+		interceptors: hctx.interceptors,
+	}
+}
+
+// WithContext returns a new hyperion.Context with the underlying context.Context replaced.
+// This is useful when a tracer or other component returns a new standard context
+// (e.g., with trace context) and you need to wrap it back into hyperion.Context.
+//
+// Note: The parameter order (hyperion.Context first, context.Context second)
+// is intentional. The primary context in Hyperion is hyperion.Context, and
+// context.Context is treated as an implementation detail being updated.
+//
+// Example:
+//
+//	stdCtx, span := otelTracer.Start(hctx, "operation")
+//	newHctx := hyperion.WithContext(hctx, stdCtx)
+//
+//nolint:revive // Parameter order is intentional for API design
+func WithContext(ctx Context, stdCtx context.Context) Context {
+	hctx, ok := ctx.(*hyperionContext)
+	if !ok {
+		// Fallback: create new context
+		return New(stdCtx, ctx.Logger(), ctx.DB(), ctx.Tracer(), ctx.Meter())
+	}
+
+	return &hyperionContext{
+		Context:      stdCtx, // Replace underlying context
+		logger:       hctx.logger,
+		db:           hctx.db,
+		tracer:       hctx.tracer,
+		meter:        hctx.meter,
+		span:         hctx.span,
+		interceptors: hctx.interceptors,
+	}
+}
+
+// WithSpan returns a new Context with the specified span.
+// This is used internally when tracer.Start() creates a new span.
+//
+// Example:
+//
+//	newCtx, span := tracer.Start(ctx, "operation")
+//	// newCtx already has the span set via WithSpan
+func WithSpan(ctx Context, span Span) Context {
+	hctx, ok := ctx.(*hyperionContext)
+	if !ok {
+		// Fallback: create new context
+		return New(ctx, ctx.Logger(), ctx.DB(), ctx.Tracer(), ctx.Meter())
+	}
+
+	return &hyperionContext{
+		Context:      hctx.Context,
+		logger:       hctx.logger,
+		db:           hctx.db,
+		tracer:       hctx.tracer,
+		meter:        hctx.meter,
+		span:         span, // Set new span
 		interceptors: hctx.interceptors,
 	}
 }

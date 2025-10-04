@@ -68,14 +68,14 @@ func TestNewOtelTracer(t *testing.T) {
 
 				// Test basic functionality
 				ctx := context.Background()
-				_, span := tracer.Start(ctx, "test-span")
+				_, span := tracer.Start(wrapContext(ctx), "test-span")
 				if span == nil {
 					t.Error("expected non-nil span")
 				}
 				span.End()
 
 				// Shutdown via type assertion
-				if ot, ok := tracer.(*otelTracer); ok {
+				if ot, ok := tracer.(*OtelTracer); ok {
 					if err := ot.Shutdown(ctx); err != nil {
 						t.Errorf("failed to shutdown tracer: %v", err)
 					}
@@ -105,7 +105,7 @@ func TestNewOtelMeter(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "otlp config (not implemented)",
+			name: "otlp config",
 			config: MetricsConfig{
 				Enabled:     true,
 				ServiceName: "test-service",
@@ -113,7 +113,7 @@ func TestNewOtelMeter(t *testing.T) {
 				Endpoint:    "localhost:4317",
 				Interval:    10 * time.Second,
 			},
-			wantErr: true, // OTLP metrics not yet implemented
+			wantErr: false, // OTLP metrics now implemented
 		},
 		{
 			name: "disabled metrics",
@@ -221,7 +221,7 @@ func TestTracerModule(t *testing.T) {
 
 		// Test basic functionality
 		ctx := context.Background()
-		_, span := tracer.Start(ctx, "test-span")
+		_, span := tracer.Start(wrapContext(ctx), "test-span")
 		if span == nil {
 			t.Error("expected non-nil span")
 		}
