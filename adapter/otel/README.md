@@ -90,22 +90,29 @@ metrics:
 
 ### Basic Setup with fx
 
+**IMPORTANT**: `hyperion.CoreModule` is required when using adapter modules. It provides the base implementations that adapters decorate.
+
 ```go
 package main
 
 import (
     "github.com/mapoio/hyperion"
     "github.com/mapoio/hyperion/adapter/otel"
+    "github.com/mapoio/hyperion/adapter/viper"
     "go.uber.org/fx"
 )
 
 func main() {
     fx.New(
-        // Provide configuration
-        fx.Provide(NewConfig),
+        // Core module is REQUIRED - provides base implementations
+        hyperion.CoreModule,
 
-        // Use OTel module (provides both Tracer and Meter)
-        otel.Module,
+        // Config adapter (optional)
+        viper.Module,
+
+        // OTel adapters (decorates CoreModule's NoOp implementations)
+        otel.TracerModule,
+        otel.MeterModule,
 
         // Your application code
         fx.Invoke(Run),
@@ -121,8 +128,9 @@ func Run(tracer hyperion.Tracer, meter hyperion.Meter) {
 
 ```go
 fx.New(
-    fx.Provide(NewConfig),
-    otel.TracerModule,  // Only tracer
+    hyperion.CoreModule,  // Required
+    viper.Module,         // Optional - for config
+    otel.TracerModule,    // Decorates tracer
     fx.Invoke(Run),
 ).Run()
 ```
@@ -131,8 +139,9 @@ fx.New(
 
 ```go
 fx.New(
-    fx.Provide(NewConfig),
-    otel.MeterModule,   // Only meter
+    hyperion.CoreModule,  // Required
+    viper.Module,         // Optional - for config
+    otel.MeterModule,     // Decorates meter
     fx.Invoke(Run),
 ).Run()
 ```

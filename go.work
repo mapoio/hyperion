@@ -5,6 +5,7 @@ use (
 	./adapter/otel
 	./adapter/viper
 	./adapter/zap
+	./example/minimal-gin
 	./example/otel
 	./hyperion
 )

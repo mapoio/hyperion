@@ -20,13 +20,14 @@ import (
 
 func main() {
 	fx.New(
+		hyperion.CoreModule,
 		// ============================================================
 		// STEP 1: Initialize OpenTelemetry SDK (Application Layer)
 		// ============================================================
 		// This is where the application has FULL CONTROL over OTel configuration.
 		// The SDK initialization happens ONCE and is shared across all components.
-		telemetry.Module,            // OTel SDK with TracerProvider & MeterProvider
-		telemetry.RuntimeMetricsModule, // Automatic Go runtime metrics (CPU, Memory, GC)
+		telemetry.Module,                    // OTel SDK with TracerProvider & MeterProvider
+		telemetry.RuntimeMetricsModule,      // Automatic Go runtime metrics (CPU, Memory, GC)
 		telemetry.HTTPInstrumentationModule, // Automatic HTTP tracing
 
 		// ============================================================
@@ -56,29 +57,6 @@ func main() {
 
 		// Register TracingInterceptor
 		fx.Provide(hyperion.NewTracingInterceptor),
-
-		// Register ContextFactory
-		fx.Provide(
-			func(
-				logger hyperion.Logger,
-				tracer hyperion.Tracer,
-				db hyperion.Database,
-				meter hyperion.Meter,
-				tracingInterceptor *hyperion.TracingInterceptor,
-			) hyperion.ContextFactory {
-				interceptors := []hyperion.Interceptor{tracingInterceptor}
-				logger.Info("🔍 [DEBUG] ContextFactory provider called",
-					"interceptors_count", len(interceptors),
-				)
-				return hyperion.NewContextFactory(
-					logger,
-					tracer,
-					db,
-					meter,
-					hyperion.WithInterceptors(interceptors...),
-				)
-			},
-		),
 
 		// ============================================================
 		// STEP 4: Business Logic
@@ -117,6 +95,7 @@ func RegisterRoutes(
 	factory hyperion.ContextFactory, // ⭐ ContextFactory 用于创建 hyperion.Context
 	logger hyperion.Logger,
 	orderService *services.OrderService,
+	externalAPIService *services.ExternalAPIService,
 ) {
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
@@ -172,6 +151,79 @@ func RegisterRoutes(
 			"amount":     req.Amount,
 			"status":     "created",
 		})
+	})
+
+	// External API endpoints - demonstrate HTTP client tracing
+	router.GET("/api/external/user/:id", func(c *gin.Context) {
+		hctx := factory.New(c.Request.Context())
+
+		// Create root span for the HTTP request
+		hctx, rootSpan := hctx.Tracer().Start(hctx, "GET /api/external/user/:id")
+		defer rootSpan.End()
+
+		// Parse user ID
+		userID := 1
+		if id := c.Param("id"); id != "" {
+			_, _ = fmt.Sscanf(id, "%d", &userID)
+		}
+
+		hctx.Logger().Info("fetching external user", "user_id", userID)
+
+		// Call external API - this will create a child span for HTTP client call
+		user, err := externalAPIService.GetRandomUser(hctx, userID)
+		if err != nil {
+			hctx.Logger().Error("failed to fetch user", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, user)
+	})
+
+	router.GET("/api/external/post/:id", func(c *gin.Context) {
+		hctx := factory.New(c.Request.Context())
+
+		// Create root span for the HTTP request
+		hctx, rootSpan := hctx.Tracer().Start(hctx, "GET /api/external/post/:id")
+		defer rootSpan.End()
+
+		// Parse post ID
+		postID := 1
+		if id := c.Param("id"); id != "" {
+			_, _ = fmt.Sscanf(id, "%d", &postID)
+		}
+
+		hctx.Logger().Info("fetching external post", "post_id", postID)
+
+		// Call external API - this will create a child span for HTTP client call
+		post, err := externalAPIService.GetRandomPost(hctx, postID)
+		if err != nil {
+			hctx.Logger().Error("failed to fetch post", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, post)
+	})
+
+	router.GET("/api/external/ip", func(c *gin.Context) {
+		hctx := factory.New(c.Request.Context())
+
+		// Create root span for the HTTP request
+		hctx, rootSpan := hctx.Tracer().Start(hctx, "GET /api/external/ip")
+		defer rootSpan.End()
+
+		hctx.Logger().Info("fetching IP geolocation")
+
+		// Call external API - this will create a child span for HTTP client call
+		info, err := externalAPIService.GetIPInfo(hctx)
+		if err != nil {
+			hctx.Logger().Error("failed to fetch IP info", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, info)
 	})
 }
 

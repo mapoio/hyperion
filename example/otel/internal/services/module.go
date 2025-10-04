@@ -47,4 +47,7 @@ var Module = fx.Module("services",
 
 	// Level 1 (entry point)
 	fx.Provide(NewOrderService),
+
+	// External API service (independent)
+	fx.Provide(NewExternalAPIService),
 )

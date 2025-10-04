@@ -36,7 +36,8 @@ Hyperion is a **zero lock-in** Go backend framework built on the **core-adapter 
 - ✅ **Type-Safe Context**: `hyperion.Context` with integrated tracing, logging, metrics, and database access
 - ✅ **Interceptor Pattern**: 3-line pattern for automatic tracing, logging, and metrics
 - ✅ **Unified Observability**: Automatic correlation between Logs, Traces, and Metrics via OpenTelemetry
-- ✅ **Production-Ready Adapters**: Viper (config), Zap (logging), GORM (database) with 80%+ test coverage
+- ✅ **Exemplar Support**: Metrics automatically link to traces for seamless navigation in Grafana/HyperDX
+- ✅ **Production-Ready Adapters**: Viper (config), Zap (logging), GORM (database), OpenTelemetry (tracing/metrics) with 80%+ test coverage
 - ✅ **Declarative Transactions**: UnitOfWork pattern with automatic commit/rollback and panic recovery
 - ✅ **Hot Configuration Reload**: Viper-based config with file watching support
 - ✅ **Transaction Propagation**: Type-safe context-based transaction propagation via `hyperion.WithDB()`
@@ -170,8 +171,8 @@ hyperion/                          # Monorepo root
 | `Database` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Database access with GORM |
 | `Executor` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Query execution with transaction tracking |
 | `UnitOfWork` | ✅ Implemented | [adapter/gorm](adapter/gorm) | Declarative transaction management |
-| `Tracer` | ✅ Implemented | [hyperion/tracer.go](hyperion/tracer.go) | Distributed tracing (NoOp default) |
-| `Meter` | ✅ Implemented | [hyperion/metric.go](hyperion/metric.go) | Metrics collection (NoOp default) |
+| `Tracer` | ✅ Implemented | [adapter/otel](adapter/otel) | Distributed tracing with OpenTelemetry |
+| `Meter` | ✅ Implemented | [adapter/otel](adapter/otel) | Metrics collection with OpenTelemetry |
 | `Interceptor` | ✅ Implemented | [hyperion/interceptor.go](hyperion/interceptor.go) | Cross-cutting concerns pattern |
 | `Cache` | 🔜 Planned | `adapter/ristretto` | In-memory caching |
 | `Context` | ✅ Implemented | [hyperion/context.go](hyperion/context.go) | Type-safe request context |
@@ -222,10 +223,10 @@ For detailed design rationale, see [Architecture Decisions](docs/architecture-de
 
 | Adapter | Status | Version | Test Coverage | Purpose |
 |---------|--------|---------|---------------|---------|
-| **[Viper](adapter/viper)** | ✅ Implemented | v1.20.0 | 84.4% | Config management with hot reload |
-| **[Zap](adapter/zap)** | ✅ Implemented | v1.27.0 | 93.9% | High-performance structured logging |
+| **[Viper](adapter/viper)** | ✅ Implemented | v1.21.0 | 84.4% | Config management with hot reload |
+| **[Zap](adapter/zap)** | ✅ Implemented | v1.27.0 | 93.9% | High-performance structured logging with trace correlation |
 | **[GORM](adapter/gorm)** | ✅ Implemented | v1.25.12 | 82.1% | Database access with declarative transactions |
-| **OpenTelemetry** | 🔜 Planned | v1.33.0+ | - | Distributed tracing |
+| **[OpenTelemetry](adapter/otel)** | ✅ Implemented | v1.38.0 | 85%+ | Distributed tracing, metrics with exemplars, and trace correlation |
 | **Ristretto** | 🔜 Planned | v1.3.0+ | - | In-memory caching |
 | **Redis** | 🔜 Planned | v9.0.0+ | - | Distributed caching |
 

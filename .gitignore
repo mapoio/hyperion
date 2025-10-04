@@ -44,3 +44,4 @@ CLAUDE.md
 .bmad-core/
 .claude
 bin/
+.DS_Store
