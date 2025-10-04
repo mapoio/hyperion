@@ -31,9 +31,6 @@ func Example_interceptorBasicUsage() {
 
 	_ = app.Err()
 	// Output:
-	// [Hyperion] Using no-op Logger
-	// [Hyperion] Using no-op Tracer
-	// [Hyperion] Using no-op Database
 	// [Hyperion] Using no-op Meter
 }
 
@@ -59,9 +56,6 @@ func Example_interceptorSelectiveApplication() {
 
 	_ = app.Err()
 	// Output:
-	// [Hyperion] Using no-op Logger
-	// [Hyperion] Using no-op Tracer
-	// [Hyperion] Using no-op Database
 	// [Hyperion] Using no-op Meter
 }
 
@@ -92,9 +86,6 @@ func Example_interceptorCustomInterceptor() {
 
 	_ = app.Err()
 	// Output:
-	// [Hyperion] Using no-op Logger
-	// [Hyperion] Using no-op Tracer
-	// [Hyperion] Using no-op Database
 	// [Hyperion] Using no-op Meter
 }
 
