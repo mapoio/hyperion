@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop, feature/*, refactor/* ]
+    branches: [ main, develop, feature/*, refactor/*, experiment/* ]
   pull_request:
     branches: [ main, develop ]
 
@@ -12,7 +12,7 @@ permissions:
 
 env:
   # Workspace modules (keep in sync with Makefile)
-  MODULES: "hyperion adapter/viper"
+  MODULES: "hyperion adapter/otel adapter/viper adapter/zap adapter/gorm"
 
 jobs:
   # Test job - runs tests with coverage across all modules
@@ -35,7 +35,10 @@ jobs:
           cache-dependency-path: |
             go.work.sum
             hyperion/go.sum
+            adapter/otel/go.sum
             adapter/viper/go.sum
+            adapter/zap/go.sum
+            adapter/gorm/go.sum
 
       - name: Verify Go workspace
         run: make check-workspace
@@ -49,7 +52,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: ./hyperion/coverage.out,./adapter/viper/coverage.out
+          files: ./hyperion/coverage.out,./adapter/otel/coverage.out,./adapter/viper/coverage.out,./adapter/zap/coverage.out,./adapter/gorm/coverage.out
           flags: unittests
           name: codecov-umbrella
 
@@ -75,11 +78,32 @@ jobs:
           working-directory: hyperion
           args: --config=../.golangci.yml --timeout=10m
 
+      - name: Run golangci-lint (adapter/otel)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: adapter/otel
+          args: --config=../../.golangci.yml --timeout=10m
+
       - name: Run golangci-lint (adapter/viper)
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           working-directory: adapter/viper
+          args: --config=../../.golangci.yml --timeout=10m
+
+      - name: Run golangci-lint (adapter/zap)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: adapter/zap
+          args: --config=../../.golangci.yml --timeout=10m
+
+      - name: Run golangci-lint (adapter/gorm)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: adapter/gorm
           args: --config=../../.golangci.yml --timeout=10m
 
       - name: Check code formatting
@@ -124,7 +148,7 @@ jobs:
         run: |
           # Run security scan and generate SARIF for GitHub
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          for module in hyperion adapter/viper; do
+          for module in hyperion adapter/otel adapter/viper adapter/zap adapter/gorm; do
             echo "Security scanning $module..."
             (cd $module && gosec -no-fail -fmt sarif -out ../results-$(basename $module).sarif ./...)
           done
