@@ -59,12 +59,7 @@ var CoreModule = fx.Module("hyperion.core",
 //	    redis.Module,                        // MUST provide
 //	    myapp.Module,
 //	).Run()
-var CoreWithoutDefaultsModule = fx.Module("hyperion.core.minimal",
-	fx.Options(
-		// Context infrastructure with interceptor support
-		ContextModule,
-	),
-)
+var CoreWithoutDefaultsModule = CoreModule
 
 // ContextModule provides ContextFactory and InterceptorRegistry for dependency injection.
 // This module is automatically included in CoreModule.

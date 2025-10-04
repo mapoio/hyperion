@@ -186,11 +186,11 @@ func TestRegisterShutdownHook(t *testing.T) {
 				}
 			}),
 			fx.Provide(func(cfg hyperion.Config) (*sdktrace.TracerProvider, error) {
-				tracer, err := NewOtelTracer(cfg)
+				t, err := NewOtelTracer(cfg)
 				if err != nil {
 					return nil, err
 				}
-				return tracer.(*OtelTracer).provider.(*sdktrace.TracerProvider), nil
+				return t.(*OtelTracer).provider.(*sdktrace.TracerProvider), nil
 			}),
 			TracerModule,
 			fx.Invoke(RegisterShutdownHook),
@@ -222,11 +222,11 @@ func TestTracerModule(t *testing.T) {
 				}
 			}),
 			fx.Provide(func(cfg hyperion.Config) (*sdktrace.TracerProvider, error) {
-				tracer, err := NewOtelTracer(cfg)
+				t, err := NewOtelTracer(cfg)
 				if err != nil {
 					return nil, err
 				}
-				return tracer.(*OtelTracer).provider.(*sdktrace.TracerProvider), nil
+				return t.(*OtelTracer).provider.(*sdktrace.TracerProvider), nil
 			}),
 			TracerModule,
 			fx.Populate(&tracer),
@@ -269,11 +269,11 @@ func TestMeterModule(t *testing.T) {
 				}
 			}),
 			fx.Provide(func(cfg hyperion.Config) (*sdkmetric.MeterProvider, error) {
-				meter, err := NewOtelMeter(cfg)
+				m, err := NewOtelMeter(cfg)
 				if err != nil {
 					return nil, err
 				}
-				return meter.(*OtelMeter).provider.(*sdkmetric.MeterProvider), nil
+				return m.(*OtelMeter).provider.(*sdkmetric.MeterProvider), nil
 			}),
 			MeterModule,
 			fx.Populate(&meter),
