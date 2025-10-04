@@ -7,6 +7,8 @@ import (
 
 	"github.com/mapoio/hyperion"
 
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
@@ -167,6 +169,8 @@ func TestNewOtelMeter(t *testing.T) {
 
 func TestRegisterShutdownHook(t *testing.T) {
 	t.Run("registers shutdown hook successfully", func(t *testing.T) {
+		resetProviderForTesting()
+
 		app := fxtest.New(t,
 			fx.Provide(func() hyperion.Config {
 				return &mockConfig{
@@ -181,8 +185,14 @@ func TestRegisterShutdownHook(t *testing.T) {
 					},
 				}
 			}),
-			fx.Provide(hyperion.NewNoOpTracer), // Provide base implementation
-			TracerModule,                       // Decorate with OtelTracer
+			fx.Provide(func(cfg hyperion.Config) (*sdktrace.TracerProvider, error) {
+				tracer, err := NewOtelTracer(cfg)
+				if err != nil {
+					return nil, err
+				}
+				return tracer.(*OtelTracer).provider.(*sdktrace.TracerProvider), nil
+			}),
+			TracerModule,
 			fx.Invoke(RegisterShutdownHook),
 		)
 
@@ -193,6 +203,8 @@ func TestRegisterShutdownHook(t *testing.T) {
 
 func TestTracerModule(t *testing.T) {
 	t.Run("tracer module provides tracer", func(t *testing.T) {
+		resetProviderForTesting()
+
 		var tracer hyperion.Tracer
 
 		app := fxtest.New(t,
@@ -209,8 +221,14 @@ func TestTracerModule(t *testing.T) {
 					},
 				}
 			}),
-			fx.Provide(hyperion.NewNoOpTracer), // Provide base implementation
-			TracerModule,                       // Decorate with OtelTracer
+			fx.Provide(func(cfg hyperion.Config) (*sdktrace.TracerProvider, error) {
+				tracer, err := NewOtelTracer(cfg)
+				if err != nil {
+					return nil, err
+				}
+				return tracer.(*OtelTracer).provider.(*sdktrace.TracerProvider), nil
+			}),
+			TracerModule,
 			fx.Populate(&tracer),
 		)
 
@@ -233,6 +251,8 @@ func TestTracerModule(t *testing.T) {
 
 func TestMeterModule(t *testing.T) {
 	t.Run("meter module provides meter", func(t *testing.T) {
+		resetProviderForTesting()
+
 		var meter hyperion.Meter
 
 		app := fxtest.New(t,
@@ -248,8 +268,14 @@ func TestMeterModule(t *testing.T) {
 					},
 				}
 			}),
-			fx.Provide(hyperion.NewNoOpMeter), // Provide base implementation
-			MeterModule,                       // Decorate with OtelMeter
+			fx.Provide(func(cfg hyperion.Config) (*sdkmetric.MeterProvider, error) {
+				meter, err := NewOtelMeter(cfg)
+				if err != nil {
+					return nil, err
+				}
+				return meter.(*OtelMeter).provider.(*sdkmetric.MeterProvider), nil
+			}),
+			MeterModule,
 			fx.Populate(&meter),
 		)
 
