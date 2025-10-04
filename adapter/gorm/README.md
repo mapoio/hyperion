@@ -59,6 +59,7 @@ import (
 
 func main() {
     app := fx.New(
+        hyperion.CoreModule,  // Core infrastructure (required)
         viperadapter.Module,  // Config provider
         gormadapter.Module,   // Database provider
         fx.Invoke(run),
