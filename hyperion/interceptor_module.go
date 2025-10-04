@@ -27,11 +27,11 @@ var InterceptorsModule = fx.Module("hyperion.interceptors.base")
 //   - Execute with order 100 (outer-most)
 //
 // Implementation Note:
-// Registers TracingInterceptor to the InterceptorRegistry via fx.Invoke.
-// This ensures the interceptor is eagerly instantiated and registered.
+// Uses fx.Invoke to create and register TracingInterceptor AFTER all Provide/Decorate.
+// This ensures Tracer is available when TracingInterceptor is constructed.
 var TracingInterceptorModule = fx.Module("hyperion.interceptors.tracing",
-	fx.Provide(NewTracingInterceptor),
-	fx.Invoke(func(registry InterceptorRegistry, interceptor *TracingInterceptor) {
+	fx.Invoke(func(registry InterceptorRegistry, tracer Tracer) {
+		interceptor := NewTracingInterceptor(tracer)
 		registry.Register(interceptor)
 	}),
 )
@@ -54,11 +54,11 @@ var TracingInterceptorModule = fx.Module("hyperion.interceptors.tracing",
 //   - Execute with order 200 (after tracing)
 //
 // Implementation Note:
-// Registers LoggingInterceptor to the InterceptorRegistry via fx.Invoke.
-// This ensures the interceptor is eagerly instantiated and registered.
+// Uses fx.Invoke to create and register LoggingInterceptor AFTER all Provide/Decorate.
+// This ensures Logger is available when LoggingInterceptor is constructed.
 var LoggingInterceptorModule = fx.Module("hyperion.interceptors.logging",
-	fx.Provide(NewLoggingInterceptor),
-	fx.Invoke(func(registry InterceptorRegistry, interceptor *LoggingInterceptor) {
+	fx.Invoke(func(registry InterceptorRegistry, logger Logger) {
+		interceptor := NewLoggingInterceptor(logger)
 		registry.Register(interceptor)
 	}),
 )

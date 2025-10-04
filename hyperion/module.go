@@ -2,40 +2,38 @@ package hyperion
 
 import "go.uber.org/fx"
 
-// CoreModule is the default Hyperion module with all no-op implementations.
-// This is the RECOMMENDED module for most applications.
+// CoreModule provides the minimal core infrastructure.
+// It ONLY includes ContextFactory and Interceptor infrastructure.
 //
-// CoreModule includes:
-//   - All no-op default implementations (Logger, Tracer, Database, Config, Cache, Meter)
-//   - ContextFactory with interceptor infrastructure
-//   - InterceptorsModule (base infrastructure, no interceptors registered)
+// You MUST provide implementations for all interfaces via adapters:
+//   - Config: viper.Module, etc.
+//   - Logger: zap.Module, etc.
+//   - Tracer: hyperotel.Module, etc.
+//   - Meter: hyperotel.Module, etc.
+//   - Database: gorm.Module, etc.
+//   - Cache: redis.Module, etc.
+//   - UnitOfWork: gorm.Module, etc.
 //
-// Adapters will automatically override no-op implementations when provided:
-//   - adapter/zap.Module overrides Logger
-//   - adapter/otel.Module overrides Tracer and Meter
-//   - adapter/gorm.Module overrides Database
-//   - adapter/viper.Module overrides Config
-//   - adapter/redis.Module overrides Cache
-//
-// To enable built-in interceptors, add them separately:
+// Usage:
 //
 //	fx.New(
-//	    hyperion.CoreModule,                  // Core infrastructure
-//	    hyperion.TracingInterceptorModule,    // Optional: enable tracing
-//	    hyperion.LoggingInterceptorModule,    // Optional: enable logging
-//	    zap.Module,                           // Override Logger
-//	    otel.Module,                          // Override Tracer and Meter
+//	    hyperion.CoreModule,   // Core infrastructure only
+//	    viper.Module,          // Provide Config
+//	    zap.Module,            // Provide Logger
+//	    hyperotel.Module,      // Provide Tracer and Meter
+//	    gorm.Module,           // Provide Database and UnitOfWork
+//	    redis.Module,          // Provide Cache
 //	    myapp.Module,
 //	).Run()
 var CoreModule = fx.Module("hyperion.core",
 	fx.Options(
 		// Default implementations (no-op + Decorate pattern)
-		DefaultLoggerModule,
-		DefaultTracerModule,
-		DefaultDatabaseModule,
-		DefaultConfigModule,
-		DefaultCacheModule,
-		DefaultMeterModule,
+		// DefaultLoggerModule,
+		// DefaultTracerModule,
+		// DefaultDatabaseModule,
+		// DefaultConfigModule,
+		// DefaultCacheModule,
+		// DefaultMeterModule,
 
 		// Context infrastructure with interceptor support
 		ContextModule,
@@ -65,7 +63,6 @@ var CoreWithoutDefaultsModule = fx.Module("hyperion.core.minimal",
 	fx.Options(
 		// Context infrastructure with interceptor support
 		ContextModule,
-		InterceptorsModule, // Base infrastructure (no interceptors registered)
 	),
 )
 

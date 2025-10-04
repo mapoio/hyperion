@@ -131,7 +131,7 @@ func NewOtelMeterProvider(mp *sdkmetric.MeterProvider) hyperion.Meter {
 // TracerModule provides OpenTelemetry Tracer implementation.
 // Uses fx.Decorate to override the default no-op Tracer from CoreModule.
 var TracerModule = fx.Module("hyperion.adapter.otel.tracer",
-	fx.Decorate(
+	fx.Provide(
 		fx.Annotate(
 			NewOtelTracerProvider,
 			fx.As(new(hyperion.Tracer)),
@@ -142,7 +142,7 @@ var TracerModule = fx.Module("hyperion.adapter.otel.tracer",
 // MeterModule provides OpenTelemetry Meter implementation.
 // Uses fx.Decorate to override the default no-op Meter from CoreModule.
 var MeterModule = fx.Module("hyperion.adapter.otel.meter",
-	fx.Decorate(
+	fx.Provide(
 		fx.Annotate(
 			NewOtelMeterProvider,
 			fx.As(new(hyperion.Meter)),
