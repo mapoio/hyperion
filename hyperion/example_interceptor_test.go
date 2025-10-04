@@ -18,6 +18,12 @@ func Example_interceptorBasicUsage() {
 		hyperion.TracingInterceptorModule, // Enable tracing interceptor
 		hyperion.LoggingInterceptorModule, // Enable logging interceptor
 
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
+
 		fx.Provide(NewUserService),
 		fx.Invoke(func(service *UserService, factory hyperion.ContextFactory) {
 			ctx := factory.New(context.Background())
@@ -31,9 +37,6 @@ func Example_interceptorBasicUsage() {
 
 	_ = app.Err()
 	// Output:
-	// [Hyperion] Using no-op Logger
-	// [Hyperion] Using no-op Tracer
-	// [Hyperion] Using no-op Database
 	// [Hyperion] Using no-op Meter
 }
 
@@ -42,6 +45,12 @@ func Example_interceptorSelectiveApplication() {
 	app := fx.New(
 		hyperion.CoreModule,
 		hyperion.AllInterceptorsModule, // Enable all built-in interceptors
+
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
 
 		fx.Provide(NewUserService),
 		fx.Invoke(func(service *UserService, factory hyperion.ContextFactory) {
@@ -59,9 +68,6 @@ func Example_interceptorSelectiveApplication() {
 
 	_ = app.Err()
 	// Output:
-	// [Hyperion] Using no-op Logger
-	// [Hyperion] Using no-op Tracer
-	// [Hyperion] Using no-op Database
 	// [Hyperion] Using no-op Meter
 }
 
@@ -70,6 +76,12 @@ func Example_interceptorCustomInterceptor() {
 	app := fx.New(
 		hyperion.CoreModule,
 		hyperion.AllInterceptorsModule, // Enable built-in interceptors
+
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
 
 		// Register custom interceptor via fx group
 		fx.Provide(
@@ -92,9 +104,6 @@ func Example_interceptorCustomInterceptor() {
 
 	_ = app.Err()
 	// Output:
-	// [Hyperion] Using no-op Logger
-	// [Hyperion] Using no-op Tracer
-	// [Hyperion] Using no-op Database
 	// [Hyperion] Using no-op Meter
 }
 

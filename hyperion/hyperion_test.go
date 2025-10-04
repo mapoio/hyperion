@@ -9,10 +9,19 @@ import (
 	"github.com/mapoio/hyperion"
 )
 
-// TestCoreModule tests that CoreModule provides all default implementations
+// TestCoreModule tests that CoreModule works with explicitly provided adapters
 func TestCoreModule(t *testing.T) {
 	app := fx.New(
 		hyperion.CoreModule,
+
+		// Provide required adapters explicitly
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpConfig),
+		fx.Provide(hyperion.NewNoOpCache),
+		fx.Provide(hyperion.NewNoOpMeter),
+
 		fx.Invoke(func(
 			logger hyperion.Logger,
 			tracer hyperion.Tracer,
@@ -53,7 +62,7 @@ func TestCoreModule(t *testing.T) {
 				t.Errorf("Expected empty string, got %s", value)
 			}
 
-			t.Log("All default implementations working correctly")
+			t.Log("All implementations working correctly")
 		}),
 		fx.NopLogger,
 	)

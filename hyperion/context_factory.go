@@ -1,6 +1,8 @@
 package hyperion
 
-import "context"
+import (
+	"context"
+)
 
 // ContextFactory creates new Hyperion contexts with injected dependencies.
 // It is designed to be used with fx dependency injection.
@@ -19,18 +21,17 @@ import "context"
 type ContextFactory interface {
 	// New creates a new Hyperion context from a standard context.
 	// The returned context will have Logger, Tracer, DB, and Meter injected.
+	// Interceptors are dynamically fetched from the InterceptorRegistry.
 	New(ctx context.Context) Context
 }
 
 // contextFactory is the default implementation of ContextFactory.
 type contextFactory struct {
-	logger Logger
-	tracer Tracer
-	db     Database
-	meter  Meter
-
-	// Interceptors to inject into contexts (from fx group)
-	interceptors []Interceptor
+	logger   Logger
+	tracer   Tracer
+	db       Database
+	meter    Meter
+	registry InterceptorRegistry // Registry to dynamically fetch interceptors
 }
 
 // NewContextFactory creates a new ContextFactory with the given dependencies.
@@ -54,49 +55,41 @@ func NewContextFactory(logger Logger, tracer Tracer, db Database, meter Meter, o
 		opt(f)
 	}
 
-	// DEBUG: Log final interceptor count after options applied
-	logger.Info("🔍 [DEBUG] NewContextFactory created",
-		"final_interceptors", len(f.interceptors),
-	)
-
 	return f
 }
 
 // New creates a new Hyperion context with injected dependencies.
+// Interceptors are dynamically fetched from the registry at context creation time.
 func (f *contextFactory) New(ctx context.Context) Context {
+	// Dynamically fetch interceptors from registry
+	var interceptors []Interceptor
+	if f.registry != nil {
+		interceptors = f.registry.GetAll()
+	}
+
 	return &hyperionContext{
 		Context:      ctx,
 		logger:       f.logger,
 		tracer:       f.tracer,
 		db:           f.db.Executor(),
 		meter:        f.meter,
-		interceptors: f.interceptors, // Inject interceptors from fx group
+		interceptors: interceptors, // Inject interceptors from registry
 	}
 }
 
 // FactoryOption is a function that configures a ContextFactory.
 type FactoryOption func(*contextFactory)
 
-// WithInterceptors sets the interceptors to inject into contexts.
-// This is typically used with fx group injection.
+// WithRegistry sets the interceptor registry to use for context creation.
+// The registry is used to dynamically fetch interceptors at context creation time.
 //
 // Example with fx:
 //
-//	type FactoryParams struct {
-//	    fx.In
-//	    Logger       Logger
-//	    Tracer       Tracer
-//	    DB           Database
-//	    Meter        Meter
-//	    Interceptors []Interceptor `group:"hyperion.interceptors"`
-//	}
-//
-//	fx.Provide(func(p FactoryParams) ContextFactory {
-//	    return NewContextFactory(p.Logger, p.Tracer, p.DB, p.Meter,
-//	        WithInterceptors(p.Interceptors...))
+//	fx.Provide(func(registry InterceptorRegistry, ...) ContextFactory {
+//	    return NewContextFactory(..., WithRegistry(registry))
 //	})
-func WithInterceptors(interceptors ...Interceptor) FactoryOption {
+func WithRegistry(registry InterceptorRegistry) FactoryOption {
 	return func(f *contextFactory) {
-		f.interceptors = sortInterceptors(interceptors)
+		f.registry = registry
 	}
 }

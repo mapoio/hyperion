@@ -126,7 +126,9 @@ func (b *otlpLogBridge) Sync() error {
 	if b.provider != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return b.provider.Shutdown(ctx)
+		// Use ForceFlush instead of Shutdown to ensure logs are exported
+		// without closing the provider. Shutdown should only be called during app termination.
+		return b.provider.ForceFlush(ctx)
 	}
 	return nil
 }

@@ -90,7 +90,7 @@ metrics:
 
 ### Basic Setup with fx
 
-**IMPORTANT**: `hyperion.CoreModule` is required when using adapter modules. It provides the base implementations that adapters decorate.
+**IMPORTANT**: `hyperion.CoreModule` is required when using adapter modules. It provides core infrastructure (ContextFactory, InterceptorRegistry) that all modules depend on.
 
 ```go
 package main
@@ -104,13 +104,13 @@ import (
 
 func main() {
     fx.New(
-        // Core module is REQUIRED - provides base implementations
+        // Core module is REQUIRED - provides ContextFactory and InterceptorRegistry
         hyperion.CoreModule,
 
         // Config adapter (optional)
         viper.Module,
 
-        // OTel adapters (decorates CoreModule's NoOp implementations)
+        // OTel adapters (provide Tracer and Meter implementations)
         otel.TracerModule,
         otel.MeterModule,
 
@@ -128,9 +128,9 @@ func Run(tracer hyperion.Tracer, meter hyperion.Meter) {
 
 ```go
 fx.New(
-    hyperion.CoreModule,  // Required
+    hyperion.CoreModule,  // Required - provides ContextFactory
     viper.Module,         // Optional - for config
-    otel.TracerModule,    // Decorates tracer
+    otel.TracerModule,    // Provides Tracer implementation
     fx.Invoke(Run),
 ).Run()
 ```
@@ -139,9 +139,9 @@ fx.New(
 
 ```go
 fx.New(
-    hyperion.CoreModule,  // Required
+    hyperion.CoreModule,  // Required - provides ContextFactory
     viper.Module,         // Optional - for config
-    otel.MeterModule,     // Decorates meter
+    otel.MeterModule,     // Provides Meter implementation
     fx.Invoke(Run),
 ).Run()
 ```

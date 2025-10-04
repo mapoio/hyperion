@@ -60,6 +60,7 @@ import (
 
 func main() {
     app := fx.New(
+        hyperion.CoreModule,  // Core infrastructure (required)
         viperadapter.Module,  // Config provider
         fx.Invoke(run),
     )
@@ -432,6 +433,7 @@ func TestService(t *testing.T) {
 
 ```go
 app := fx.New(
+    hyperion.CoreModule,  // Core infrastructure (required)
     viperadapter.Module,
     zapadapter.Module,  // Reads log.* from config
     fx.Invoke(func(logger hyperion.Logger, cfg hyperion.Config) {
@@ -447,6 +449,7 @@ app := fx.New(
 
 ```go
 app := fx.New(
+    hyperion.CoreModule,  // Core infrastructure (required)
     viperadapter.Module,
     gormadapter.Module,  // Reads database.* from config
     fx.Invoke(func(db hyperion.Database, cfg hyperion.Config) {

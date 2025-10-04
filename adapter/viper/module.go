@@ -6,30 +6,31 @@ import (
 	"github.com/mapoio/hyperion"
 )
 
-// Module provides a Viper-based Config implementation.
-// It overrides the default no-op Config when imported.
+// Module provides Viper-based Config implementation.
 //
-// Example usage:
+// Usage:
 //
 //	fx.New(
 //	    hyperion.CoreModule,
-//	    viper.Module,  // Decorates hyperion.Config with Viper
+//	    viper.Module,  // Provides Config
 //	    myapp.Module,
 //	).Run()
 var Module = fx.Module("hyperion.adapter.viper",
-	fx.Decorate(
+	fx.Provide(
 		fx.Annotate(
-			NewProviderFromEnv,
+			NewViperProvider,
 			fx.As(new(hyperion.Config)),
 			fx.As(new(hyperion.ConfigWatcher)),
 		),
 	),
 )
 
-// NewProviderFromEnv creates a viper provider using the CONFIG_PATH environment variable.
-// Falls back to "configs/config.yaml" if CONFIG_PATH is not set.
-func NewProviderFromEnv() (hyperion.ConfigWatcher, error) {
-	// TODO: Read from environment variable or fx params
-	// For now, use a sensible default
-	return NewProvider("configs/config.yaml")
+// NewViperProvider creates a Viper config provider.
+func NewViperProvider() (hyperion.ConfigWatcher, error) {
+	configPath := "configs/config.yaml"
+	provider, err := NewProvider(configPath)
+	if err != nil {
+		return nil, err
+	}
+	return provider, nil
 }

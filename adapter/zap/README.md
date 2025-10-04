@@ -53,6 +53,7 @@ import (
 
 func main() {
     app := fx.New(
+        hyperion.CoreModule,  // Core infrastructure (required)
         viperadapter.Module,  // Config provider
         zapadapter.Module,    // Logger provider
         fx.Invoke(run),

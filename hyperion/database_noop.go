@@ -48,3 +48,21 @@ func (e *noopExecutor) Begin(ctx context.Context) (Executor, error) {
 func (e *noopExecutor) Commit() error   { return nil }
 func (e *noopExecutor) Rollback() error { return nil }
 func (e *noopExecutor) Unwrap() any     { return nil }
+
+// noopUnitOfWork is a no-op implementation of UnitOfWork interface.
+type noopUnitOfWork struct{}
+
+// NewNoOpUnitOfWork creates a new no-op UnitOfWork implementation.
+func NewNoOpUnitOfWork() UnitOfWork {
+	return &noopUnitOfWork{}
+}
+
+func (u *noopUnitOfWork) WithTransaction(ctx Context, fn func(txCtx Context) error) error {
+	// No-op: just execute the function with the original context
+	return fn(ctx)
+}
+
+func (u *noopUnitOfWork) WithTransactionOptions(ctx Context, opts *TransactionOptions, fn func(txCtx Context) error) error {
+	// No-op: ignore options and just execute the function
+	return fn(ctx)
+}

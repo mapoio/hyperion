@@ -317,8 +317,8 @@ func TestProviderWatchMultipleCallbacks(t *testing.T) {
 	}
 }
 
-// TestNewProviderFromEnv tests environment-based provider creation
-func TestNewProviderFromEnv(t *testing.T) {
+// TestNewViperProvider tests default provider creation with standard config path
+func TestNewViperProvider(t *testing.T) {
 	// Create a temporary config file in the default location
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "configs")
@@ -344,10 +344,10 @@ func TestNewProviderFromEnv(t *testing.T) {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	// Test NewProviderFromEnv (will use default path "configs/config.yaml")
-	provider, err := viperadapter.NewProviderFromEnv()
+	// Test NewViperProvider (will use default path "configs/config.yaml")
+	provider, err := viperadapter.NewViperProvider()
 	if err != nil {
-		t.Fatalf("NewProviderFromEnv failed: %v", err)
+		t.Fatalf("NewViperProvider failed: %v", err)
 	}
 	if provider == nil {
 		t.Fatal("Provider should not be nil")
