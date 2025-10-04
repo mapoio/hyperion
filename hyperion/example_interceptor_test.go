@@ -18,6 +18,12 @@ func Example_interceptorBasicUsage() {
 		hyperion.TracingInterceptorModule, // Enable tracing interceptor
 		hyperion.LoggingInterceptorModule, // Enable logging interceptor
 
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
+
 		fx.Provide(NewUserService),
 		fx.Invoke(func(service *UserService, factory hyperion.ContextFactory) {
 			ctx := factory.New(context.Background())
@@ -39,6 +45,12 @@ func Example_interceptorSelectiveApplication() {
 	app := fx.New(
 		hyperion.CoreModule,
 		hyperion.AllInterceptorsModule, // Enable all built-in interceptors
+
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
 
 		fx.Provide(NewUserService),
 		fx.Invoke(func(service *UserService, factory hyperion.ContextFactory) {
@@ -64,6 +76,12 @@ func Example_interceptorCustomInterceptor() {
 	app := fx.New(
 		hyperion.CoreModule,
 		hyperion.AllInterceptorsModule, // Enable built-in interceptors
+
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
 
 		// Register custom interceptor via fx group
 		fx.Provide(

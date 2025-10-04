@@ -17,6 +17,12 @@ func TestCoreModule_NoInterceptorsByDefault(t *testing.T) {
 	app := fx.New(
 		hyperion.CoreModule,
 
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
+
 		fx.Populate(&factory),
 		fx.NopLogger,
 	)
@@ -60,6 +66,12 @@ func TestTracingInterceptorModule(t *testing.T) {
 		hyperion.CoreModule,
 		hyperion.TracingInterceptorModule,
 
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
+
 		// Add a test interceptor to verify interceptor chain is active
 		fx.Provide(
 			fx.Annotate(
@@ -100,6 +112,12 @@ func TestLoggingInterceptorModule(t *testing.T) {
 		hyperion.CoreModule,
 		hyperion.LoggingInterceptorModule,
 
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
+
 		fx.Populate(&factory),
 		fx.NopLogger,
 	)
@@ -138,6 +156,12 @@ func TestAllInterceptorsModule(t *testing.T) {
 	app := fx.New(
 		hyperion.CoreModule,
 		hyperion.AllInterceptorsModule,
+
+		// Provide required adapters
+		fx.Provide(hyperion.NewNoOpLogger),
+		fx.Provide(hyperion.NewNoOpTracer),
+		fx.Provide(hyperion.NewNoOpDatabase),
+		fx.Provide(hyperion.NewNoOpMeter),
 
 		// Add a test interceptor to verify interceptor chain is active
 		fx.Provide(
