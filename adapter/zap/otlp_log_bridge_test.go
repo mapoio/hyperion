@@ -120,12 +120,12 @@ func TestMapLevelToSeverity(t *testing.T) {
 		level string
 		want  int // We can't import the exact type, so we use int
 	}{
-		{"debug", 5},    // log.SeverityDebug
-		{"info", 9},     // log.SeverityInfo
-		{"warn", 13},    // log.SeverityWarn
-		{"error", 17},   // log.SeverityError
-		{"fatal", 21},   // log.SeverityFatal
-		{"unknown", 9},  // log.SeverityInfo (default)
+		{"debug", 5},   // log.SeverityDebug
+		{"info", 9},    // log.SeverityInfo
+		{"warn", 13},   // log.SeverityWarn
+		{"error", 17},  // log.SeverityError
+		{"fatal", 21},  // log.SeverityFatal
+		{"unknown", 9}, // log.SeverityInfo (default)
 	}
 
 	for _, tt := range tests {
