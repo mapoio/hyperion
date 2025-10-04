@@ -1,52 +1,71 @@
 package hyperion
 
 import (
-	"fmt"
-
 	"go.uber.org/fx"
 )
 
 // DefaultLoggerModule provides a default no-op Logger implementation.
+// Adapters use fx.Decorate to replace this with real implementations.
 var DefaultLoggerModule = fx.Module("hyperion.default_logger",
-	fx.Provide(func() Logger {
-		fmt.Println("[Hyperion] Using no-op Logger")
-		return NewNoOpLogger()
-	}),
+	fx.Provide(
+		fx.Annotate(
+			NewNoOpLogger,
+			fx.As(new(Logger)),
+		),
+	),
 )
 
 // DefaultTracerModule provides a default no-op Tracer implementation.
+// Adapters use fx.Decorate to replace this with real implementations.
 var DefaultTracerModule = fx.Module("hyperion.default_tracer",
-	fx.Provide(func() Tracer {
-		fmt.Println("[Hyperion] Using no-op Tracer")
-		return NewNoOpTracer()
-	}),
+	fx.Provide(
+		fx.Annotate(
+			NewNoOpTracer,
+			fx.As(new(Tracer)),
+		),
+	),
 )
 
 // DefaultDatabaseModule provides a default no-op Database implementation.
+// Adapters use fx.Decorate to replace this with real implementations.
 var DefaultDatabaseModule = fx.Module("hyperion.default_database",
-	fx.Provide(func() Database {
-		fmt.Println("[Hyperion] Using no-op Database")
-		return NewNoOpDatabase()
-	}),
+	fx.Provide(
+		fx.Annotate(
+			NewNoOpDatabase,
+			fx.As(new(Database)),
+		),
+	),
 )
 
 // DefaultConfigModule provides a default no-op Config implementation.
+// Adapters use fx.Decorate to replace this with real implementations.
 var DefaultConfigModule = fx.Module("hyperion.default_config",
-	fx.Provide(func() Config {
-		fmt.Println("[Hyperion] Using no-op Config")
-		return NewNoOpConfig()
-	}),
+	fx.Provide(
+		fx.Annotate(
+			NewNoOpConfig,
+			fx.As(new(Config)),
+		),
+	),
 )
 
 // DefaultCacheModule provides a default no-op Cache implementation.
+// Adapters use fx.Decorate to replace this with real implementations.
 var DefaultCacheModule = fx.Module("hyperion.default_cache",
-	fx.Provide(func() Cache {
-		fmt.Println("[Hyperion] Using no-op Cache")
-		return NewNoOpCache()
-	}),
+	fx.Provide(
+		fx.Annotate(
+			NewNoOpCache,
+			fx.As(new(Cache)),
+		),
+	),
 )
 
 // DefaultMeterModule provides a default no-op Meter implementation.
+// Adapters use fx.Decorate to replace this with real implementations.
 var DefaultMeterModule = fx.Module("hyperion.default_meter",
-	fx.Provide(NewNoOpMeter),
+	fx.Provide(
+		fx.Annotate(
+			NewNoOpMeter,
+			fx.As(new(Meter)),
+		),
+	),
 )

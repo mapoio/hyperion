@@ -10,7 +10,7 @@ log:
   output: "stdout"
   # OTLP logs export configuration
   otlp:
-    enabled: true
+    enabled: true  # Enable to export logs to HyperDX
     endpoint: "localhost:4317"
     service_name: "hyperion-otel-example"
 

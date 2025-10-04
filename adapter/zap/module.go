@@ -6,23 +6,26 @@ import (
 	"github.com/mapoio/hyperion"
 )
 
-// Module provides Zap logger as hyperion.Logger via fx dependency injection.
+// Module provides Zap-based Logger implementation.
 //
 // Usage:
 //
-//	app := fx.New(
+//	fx.New(
 //	    hyperion.CoreModule,
-//	    viper.Module,  // Provides Config
-//	    zap.Module,    // Decorates Logger with Zap
-//	    fx.Invoke(func(logger hyperion.Logger) {
-//	        logger.Info("application started", "version", "1.0.0")
-//	    }),
-//	)
+//	    viper.Module,  // Provides Config (optional for Zap)
+//	    zap.Module,    // Provides Logger
+//	    myapp.Module,
+//	).Run()
 var Module = fx.Module("hyperion.adapter.zap",
-	fx.Decorate(
+	fx.Provide(
 		fx.Annotate(
-			NewZapLogger,
+			NewZapProvider,
 			fx.As(new(hyperion.Logger)),
 		),
 	),
 )
+
+// NewZapProvider creates a Zap logger.
+func NewZapProvider(cfg hyperion.Config) (hyperion.Logger, error) {
+	return NewZapLogger(cfg)
+}

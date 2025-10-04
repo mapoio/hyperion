@@ -56,11 +56,13 @@ func newContextLogger(logger *zap.Logger) *contextLogger {
 // extractTraceContext extracts trace_id and span_id from context and returns zap fields.
 func extractTraceContext(ctx context.Context) []zap.Field {
 	span := trace.SpanFromContext(ctx)
-	if !span.IsRecording() {
-		return nil
-	}
-
 	spanCtx := span.SpanContext()
+
+	// Only check if span context is valid (has trace ID and span ID)
+	// We don't check IsRecording() because:
+	// 1. Ended spans (IsRecording() == false) still have valid trace context
+	// 2. We want to correlate logs even after span.End() is called
+	// 3. The trace context remains valid throughout the entire request lifecycle
 	if !spanCtx.IsValid() {
 		return nil
 	}

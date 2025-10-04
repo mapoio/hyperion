@@ -146,9 +146,13 @@ func NewZapLogger(cfg hyperion.Config) (hyperion.Logger, error) {
 		var err error
 		otlpBridge, err = createOtlpLogBridge(logCfg.OtlpConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create OTLP log bridge: %w", err)
+			// OTLP is optional - log warning but continue with stdout logging
+			// This allows the logger to work even when OTLP collector is unavailable
+			fmt.Fprintf(os.Stderr, "[Zap] Warning: failed to create OTLP log bridge: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[Zap] Continuing with stdout-only logging\n")
+		} else {
+			writers = append(writers, otlpBridge)
 		}
-		writers = append(writers, otlpBridge)
 	}
 
 	// Build core with multi-writer

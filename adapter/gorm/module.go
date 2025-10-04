@@ -8,22 +8,16 @@ import (
 	"github.com/mapoio/hyperion"
 )
 
-// Module provides GORM database adapter as hyperion.Database and hyperion.UnitOfWork
-// via fx dependency injection.
+// Module provides GORM-based Database and UnitOfWork implementations.
 //
 // Usage:
 //
-//	app := fx.New(
+//	fx.New(
+//	    hyperion.CoreModule,
 //	    viper.Module,  // Provides Config
 //	    gorm.Module,   // Provides Database and UnitOfWork
-//	    fx.Invoke(func(db hyperion.Database, uow hyperion.UnitOfWork) {
-//	        // Use database and unit of work
-//	    }),
-//	)
-//
-// The module automatically handles database lifecycle:
-//   - Opens connection during application startup
-//   - Closes connection during graceful shutdown
+//	    myapp.Module,
+//	).Run()
 //
 // Configuration example (config.yaml):
 //
@@ -34,26 +28,33 @@ import (
 //	  username: dbuser
 //	  password: dbpass
 //	  database: mydb
-//	  max_open_conns: 25
-//	  max_idle_conns: 5
 var Module = fx.Module("hyperion.adapter.gorm",
-	fx.Decorate(
+	fx.Provide(
 		fx.Annotate(
-			NewGormDatabase,
+			NewGormProvider,
 			fx.As(new(hyperion.Database)),
 		),
 	),
 	fx.Provide(
 		fx.Annotate(
-			NewGormUnitOfWork,
+			NewGormUnitOfWorkProvider,
 			fx.As(new(hyperion.UnitOfWork)),
 		),
 	),
 	fx.Invoke(registerLifecycle),
 )
 
+// NewGormProvider creates a GORM database.
+func NewGormProvider(cfg hyperion.Config) (hyperion.Database, error) {
+	return NewGormDatabase(cfg)
+}
+
+// NewGormUnitOfWorkProvider creates a GORM UnitOfWork.
+func NewGormUnitOfWorkProvider(db hyperion.Database) hyperion.UnitOfWork {
+	return NewGormUnitOfWork(db)
+}
+
 // registerLifecycle registers database lifecycle hooks with fx.
-// It ensures the database connection is properly closed during shutdown.
 func registerLifecycle(lc fx.Lifecycle, db hyperion.Database) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

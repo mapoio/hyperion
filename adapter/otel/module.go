@@ -7,6 +7,8 @@ import (
 	"github.com/mapoio/hyperion"
 
 	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 )
@@ -116,11 +118,21 @@ func RegisterShutdownHook(lc fx.Lifecycle) {
 	})
 }
 
+// NewOtelTracerProvider creates a Tracer from SDK's TracerProvider.
+func NewOtelTracerProvider(tp *sdktrace.TracerProvider) hyperion.Tracer {
+	return NewOtelTracerFromProvider(tp, "hyperion-app")
+}
+
+// NewOtelMeterProvider creates a Meter from SDK's MeterProvider.
+func NewOtelMeterProvider(mp *sdkmetric.MeterProvider) hyperion.Meter {
+	return NewOtelMeterFromProvider(mp, "hyperion-app")
+}
+
 // TracerModule provides OpenTelemetry Tracer implementation.
 var TracerModule = fx.Module("hyperion.adapter.otel.tracer",
-	fx.Decorate(
+	fx.Provide(
 		fx.Annotate(
-			NewOtelTracer,
+			NewOtelTracerProvider,
 			fx.As(new(hyperion.Tracer)),
 		),
 	),
@@ -128,17 +140,26 @@ var TracerModule = fx.Module("hyperion.adapter.otel.tracer",
 
 // MeterModule provides OpenTelemetry Meter implementation.
 var MeterModule = fx.Module("hyperion.adapter.otel.meter",
-	fx.Decorate(
+	fx.Provide(
 		fx.Annotate(
-			NewOtelMeter,
+			NewOtelMeterProvider,
 			fx.As(new(hyperion.Meter)),
 		),
 	),
 )
 
-// Module provides both Tracer and Meter with unified shutdown.
+// Module provides both Tracer and Meter.
+// Requires TracerProvider and MeterProvider (e.g., from telemetry.Module).
+//
+// Usage:
+//
+//	fx.New(
+//	    hyperion.CoreModule,
+//	    telemetry.Module,  // Provides TracerProvider & MeterProvider
+//	    hyperotel.Module,  // Provides Tracer & Meter
+//	    myapp.Module,
+//	).Run()
 var Module = fx.Options(
 	TracerModule,
 	MeterModule,
-	fx.Invoke(RegisterShutdownHook),
 )
