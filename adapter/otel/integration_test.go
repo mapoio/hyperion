@@ -1,6 +1,5 @@
 package otel
 
-
 import (
 	"bytes"
 	"context"
@@ -11,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
-
 
 // TestTracerLoggerIntegration tests that trace context is properly propagated to logs.
 // This verifies that when using a Tracer to create spans, the trace_id and span_id

@@ -1,6 +1,5 @@
 package otel
 
-
 import (
 	"context"
 	"testing"
@@ -10,7 +9,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
-
 
 func TestOtelTracer_Start(t *testing.T) {
 	// Create an in-memory span exporter for testing

@@ -292,10 +292,16 @@ func WithTracer(ctx Context, tracer Tracer) Context {
 // This is useful when a tracer or other component returns a new standard context
 // (e.g., with trace context) and you need to wrap it back into hyperion.Context.
 //
+// Note: The parameter order (hyperion.Context first, context.Context second)
+// is intentional. The primary context in Hyperion is hyperion.Context, and
+// context.Context is treated as an implementation detail being updated.
+//
 // Example:
 //
 //	stdCtx, span := otelTracer.Start(hctx, "operation")
 //	newHctx := hyperion.WithContext(hctx, stdCtx)
+//
+//nolint:revive // Parameter order is intentional for API design
 func WithContext(ctx Context, stdCtx context.Context) Context {
 	hctx, ok := ctx.(*hyperionContext)
 	if !ok {

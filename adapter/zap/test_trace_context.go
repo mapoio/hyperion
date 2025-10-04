@@ -1,3 +1,4 @@
+//nolint:errcheck // Test file, errors are intentionally ignored for brevity
 package zap
 
 import (

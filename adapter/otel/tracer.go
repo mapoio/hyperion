@@ -11,6 +11,8 @@ import (
 // OtelTracer wraps an OpenTelemetry tracer to implement hyperion.Tracer.
 // It is exported to allow applications to access the underlying TracerProvider
 // for integrating OTel auto-instrumentation libraries.
+//
+//nolint:revive // Name is intentional to distinguish from hyperion.Tracer interface
 type OtelTracer struct {
 	tracer   trace.Tracer
 	provider trace.TracerProvider

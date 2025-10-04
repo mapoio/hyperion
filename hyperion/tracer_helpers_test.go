@@ -27,6 +27,10 @@ func TestStartSpan_BasicUsage(t *testing.T) {
 	assert.NotNil(t, newCtx.Tracer())
 }
 
+type testContextKey string
+
+const testKey testContextKey = "test_key"
+
 func TestStartSpan_PreservesContext(t *testing.T) {
 	tracer := NewNoOpTracer()
 	logger := NewNoOpLogger()
@@ -34,14 +38,14 @@ func TestStartSpan_PreservesContext(t *testing.T) {
 	ctx := New(context.Background(), logger, nil, tracer, nil)
 
 	// Add a value to the context
-	stdCtx := context.WithValue(ctx, "test_key", "test_value")
+	stdCtx := context.WithValue(ctx, testKey, "test_value")
 	hctx := WithContext(ctx, stdCtx)
 
 	// Call StartSpan
 	newCtx := StartSpan(hctx, "test-operation")
 
 	// Verify the value is still accessible
-	value := newCtx.Value("test_key")
+	value := newCtx.Value(testKey)
 	assert.Equal(t, "test_value", value)
 }
 

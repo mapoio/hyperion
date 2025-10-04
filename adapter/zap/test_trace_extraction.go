@@ -18,11 +18,11 @@ func TestTraceExtractionFromContext(t *testing.T) {
 
 	// Try to extract trace context
 	fields := extractTraceContext(ctx)
-	
+
 	t.Logf("Extracted fields: %v", fields)
 	t.Logf("Span is recording: %v", span.IsRecording())
 	t.Logf("Span context is valid: %v", span.SpanContext().IsValid())
-	
+
 	if len(fields) == 0 {
 		t.Error("Expected trace fields, got none")
 	}

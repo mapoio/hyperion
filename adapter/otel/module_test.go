@@ -1,6 +1,5 @@
 package otel
 
-
 import (
 	"context"
 	"testing"
@@ -11,7 +10,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
-
 
 func TestNewOtelTracer(t *testing.T) {
 	tests := []struct {

@@ -1,3 +1,4 @@
+//nolint:gocyclo,errcheck // OTLP bridge is optional, errors handled gracefully
 package zap
 
 import (

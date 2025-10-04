@@ -9,6 +9,8 @@ import (
 // OtelMeter wraps an OpenTelemetry meter to implement hyperion.Meter.
 // It is exported to allow applications to access the underlying MeterProvider
 // for integrating OTel auto-instrumentation libraries.
+//
+//nolint:revive // Name is intentional to distinguish from hyperion.Meter interface
 type OtelMeter struct {
 	meter    metric.Meter
 	provider metric.MeterProvider
