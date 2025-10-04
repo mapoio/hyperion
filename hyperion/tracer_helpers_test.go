@@ -17,7 +17,9 @@ func TestStartSpan_BasicUsage(t *testing.T) {
 
 	// Note: To enable interceptors, we'd need to set them on the context
 	// For this test, we'll just verify the basic API works
-	newCtx := StartSpan(ctx, "test-operation")
+	var err error
+	newCtx, end := StartSpan(ctx, "test-operation")
+	defer end(&err)
 
 	// Verify context was returned
 	assert.NotNil(t, newCtx)
@@ -42,7 +44,9 @@ func TestStartSpan_PreservesContext(t *testing.T) {
 	hctx := WithContext(ctx, stdCtx)
 
 	// Call StartSpan
-	newCtx := StartSpan(hctx, "test-operation")
+	var err error
+	newCtx, end := StartSpan(hctx, "test-operation")
+	defer end(&err)
 
 	// Verify the value is still accessible
 	value := newCtx.Value(testKey)
@@ -65,7 +69,9 @@ func TestStartSpan_WithTracingInterceptor(t *testing.T) {
 	hctx.interceptors = []Interceptor{interceptor}
 
 	// Call StartSpan
-	newCtx := StartSpan(hctx, "test-operation")
+	var err error
+	newCtx, end := StartSpan(hctx, "test-operation")
+	defer end(&err)
 
 	// Verify interceptor was called
 	assert.NotNil(t, newCtx)

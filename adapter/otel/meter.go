@@ -28,9 +28,8 @@ func (m *OtelMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion
 	// For now, create without options - we'll add option support later
 	counter, err := m.meter.Int64Counter(name)
 	if err != nil {
-		// In production, we should handle this error properly
-		// For now, return a no-op counter
-		return &otelCounter{counter: counter}
+		// Return no-op to prevent panic when instrument creation fails
+		return &noOpCounter{}
 	}
 	return &otelCounter{counter: counter}
 }
@@ -39,7 +38,8 @@ func (m *OtelMeter) Counter(name string, opts ...hyperion.MetricOption) hyperion
 func (m *OtelMeter) Histogram(name string, opts ...hyperion.MetricOption) hyperion.Histogram {
 	histogram, err := m.meter.Float64Histogram(name)
 	if err != nil {
-		return &otelHistogram{histogram: histogram}
+		// Return no-op to prevent panic when instrument creation fails
+		return &noOpHistogram{}
 	}
 	return &otelHistogram{histogram: histogram}
 }
@@ -49,7 +49,8 @@ func (m *OtelMeter) Gauge(name string, opts ...hyperion.MetricOption) hyperion.G
 	// Use histogram for synchronous gauge-like behavior
 	histogram, err := m.meter.Float64Histogram(name)
 	if err != nil {
-		return &otelGauge{histogram: histogram}
+		// Return no-op to prevent panic when instrument creation fails
+		return &noOpGauge{}
 	}
 	return &otelGauge{histogram: histogram}
 }
@@ -58,7 +59,8 @@ func (m *OtelMeter) Gauge(name string, opts ...hyperion.MetricOption) hyperion.G
 func (m *OtelMeter) UpDownCounter(name string, opts ...hyperion.MetricOption) hyperion.UpDownCounter {
 	counter, err := m.meter.Int64UpDownCounter(name)
 	if err != nil {
-		return &otelUpDownCounter{counter: counter}
+		// Return no-op to prevent panic when instrument creation fails
+		return &noOpUpDownCounter{}
 	}
 	return &otelUpDownCounter{counter: counter}
 }
