@@ -181,7 +181,8 @@ func TestRegisterShutdownHook(t *testing.T) {
 					},
 				}
 			}),
-			fx.Provide(NewOtelTracer),
+			fx.Provide(hyperion.NewNoOpTracer), // Provide base implementation
+			TracerModule,                       // Decorate with OtelTracer
 			fx.Invoke(RegisterShutdownHook),
 		)
 
@@ -208,7 +209,8 @@ func TestTracerModule(t *testing.T) {
 					},
 				}
 			}),
-			TracerModule,
+			fx.Provide(hyperion.NewNoOpTracer), // Provide base implementation
+			TracerModule,                       // Decorate with OtelTracer
 			fx.Populate(&tracer),
 		)
 
@@ -246,7 +248,8 @@ func TestMeterModule(t *testing.T) {
 					},
 				}
 			}),
-			MeterModule,
+			fx.Provide(hyperion.NewNoOpMeter), // Provide base implementation
+			MeterModule,                       // Decorate with OtelMeter
 			fx.Populate(&meter),
 		)
 

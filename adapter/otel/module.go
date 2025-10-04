@@ -118,7 +118,7 @@ func RegisterShutdownHook(lc fx.Lifecycle) {
 
 // TracerModule provides OpenTelemetry Tracer implementation.
 var TracerModule = fx.Module("hyperion.adapter.otel.tracer",
-	fx.Provide(
+	fx.Decorate(
 		fx.Annotate(
 			NewOtelTracer,
 			fx.As(new(hyperion.Tracer)),
@@ -128,7 +128,7 @@ var TracerModule = fx.Module("hyperion.adapter.otel.tracer",
 
 // MeterModule provides OpenTelemetry Meter implementation.
 var MeterModule = fx.Module("hyperion.adapter.otel.meter",
-	fx.Provide(
+	fx.Decorate(
 		fx.Annotate(
 			NewOtelMeter,
 			fx.As(new(hyperion.Meter)),
