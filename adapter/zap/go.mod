@@ -3,7 +3,7 @@ module github.com/mapoio/hyperion/adapter/zap
 go 1.24
 
 require (
-	github.com/mapoio/hyperion v0.0.0-00010101000000-000000000000
+	github.com/mapoio/hyperion v0.0.0-20251004111544-192b6421e92d
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.14.0
 	go.opentelemetry.io/otel/log v0.14.0
