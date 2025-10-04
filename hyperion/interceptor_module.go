@@ -25,13 +25,15 @@ var InterceptorsModule = fx.Module("hyperion.interceptors.base")
 //   - Create a span for each intercepted method
 //   - Record errors to the span
 //   - Execute with order 100 (outer-most)
+//
+// Implementation Note:
+// Registers TracingInterceptor to the InterceptorRegistry via fx.Invoke.
+// This ensures the interceptor is eagerly instantiated and registered.
 var TracingInterceptorModule = fx.Module("hyperion.interceptors.tracing",
-	fx.Provide(
-		fx.Annotate(
-			NewTracingInterceptor,
-			fx.ResultTags(`group:"hyperion.interceptors"`),
-		),
-	),
+	fx.Provide(NewTracingInterceptor),
+	fx.Invoke(func(registry InterceptorRegistry, interceptor *TracingInterceptor) {
+		registry.Register(interceptor)
+	}),
 )
 
 // LoggingInterceptorModule provides structured logging interceptor.
@@ -50,13 +52,15 @@ var TracingInterceptorModule = fx.Module("hyperion.interceptors.tracing",
 //   - Log method completion with duration (debug level)
 //   - Log method failure with error (error level)
 //   - Execute with order 200 (after tracing)
+//
+// Implementation Note:
+// Registers LoggingInterceptor to the InterceptorRegistry via fx.Invoke.
+// This ensures the interceptor is eagerly instantiated and registered.
 var LoggingInterceptorModule = fx.Module("hyperion.interceptors.logging",
-	fx.Provide(
-		fx.Annotate(
-			NewLoggingInterceptor,
-			fx.ResultTags(`group:"hyperion.interceptors"`),
-		),
-	),
+	fx.Provide(NewLoggingInterceptor),
+	fx.Invoke(func(registry InterceptorRegistry, interceptor *LoggingInterceptor) {
+		registry.Register(interceptor)
+	}),
 )
 
 // AllInterceptorsModule is a convenience module that enables both
