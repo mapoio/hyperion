@@ -14,11 +14,11 @@ type captureTracer struct {
 }
 
 type traceStartCall struct {
-	ctx      context.Context
+	ctx      Context
 	spanName string
 }
 
-func (c *captureTracer) Start(ctx context.Context, spanName string, opts ...SpanOption) (context.Context, Span) {
+func (c *captureTracer) Start(ctx Context, spanName string, opts ...SpanOption) (Context, Span) {
 	c.startCalls = append(c.startCalls, traceStartCall{ctx: ctx, spanName: spanName})
 	span := &captureSpan{}
 	c.spans = append(c.spans, span)
@@ -308,6 +308,7 @@ func (c *customContext) Logger() Logger { return c.logger }
 func (c *customContext) DB() Executor   { return c.db }
 func (c *customContext) Tracer() Tracer { return c.tracer }
 func (c *customContext) Meter() Meter   { return c.meter }
+func (c *customContext) Span() Span     { return &noopSpan{} }
 func (c *customContext) UseIntercept(parts ...any) (ctx Context, endFunc func(*error)) {
 	return c, func(*error) {}
 }

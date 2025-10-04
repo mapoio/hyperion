@@ -107,7 +107,8 @@ jobs:
       - name: Run tests with coverage (monorepo)
         run: |
           # Discover all modules dynamically from go.work
-          modules=$(go list -m -f '{{.Dir}}' | sed "s|$(pwd)/||")
+          # Exclude example/* directories from coverage checks
+          modules=$(go list -m -f '{{.Dir}}' | sed "s|$(pwd)/||" | grep -v "^example/")
 
           # Coverage threshold
           THRESHOLD=80

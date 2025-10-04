@@ -1259,16 +1259,23 @@ func (t *otelTracer) Start(ctx context.Context, spanName string, opts ...hyperio
 ```go
 type Context interface {
     context.Context
-    
+
     // Core dependency accessors - ONLY accessors
     Logger() Logger
     DB() Executor
     Tracer() Tracer
-    
+    Meter() Meter
+
+    // Direct span access (v2.1+)
+    Span() Span  // Returns the current span from context
+
     // Context management
     WithTimeout(timeout time.Duration) (Context, context.CancelFunc)
     WithCancel() (Context, context.CancelFunc)
     WithDeadline(deadline time.Time) (Context, context.CancelFunc)
+
+    // Interceptor integration
+    UseIntercept(parts ...any) (ctx Context, end func(err *error))
 }
 ```
 
@@ -1311,7 +1318,67 @@ type Context interface {
 4. **Interface Evolution**: Changes to Logger/Tracer don't affect Context
 5. **Explicit Usage**: `ctx.Logger().Info()` is more explicit than `ctx.Info()`
 
-### 9.4 Usage Pattern
+### 9.4 Direct Span Access Pattern (v2.1+)
+
+The `Span()` method provides direct access to the current span without needing to create a new one. This is useful when you need to add attributes or events to the current span without starting a child span.
+
+**When to Use `Span()` vs `Tracer().Start()`:**
+
+```go
+// ✅ Use Span() when: Adding attributes to CURRENT span
+func (s *Service) ProcessOrder(ctx hyperion.Context, orderID string) error {
+    // Add attribute to current span (created by caller or interceptor)
+    ctx.Span().SetAttributes(hyperion.String("order_id", orderID))
+
+    // Business logic...
+    return nil
+}
+
+// ✅ Use Tracer().Start() when: Creating a NEW child span
+func (s *Service) ValidateOrder(ctx hyperion.Context, orderID string) error {
+    // Start a new child span
+    newCtx, span := ctx.Tracer().Start(ctx, "ValidateOrder")
+    defer span.End()
+
+    span.SetAttributes(hyperion.String("order_id", orderID))
+
+    // Business logic...
+    return nil
+}
+```
+
+**UseIntercept Pattern with Span():**
+
+The `UseIntercept` pattern automatically creates a span, so you can access it directly:
+
+```go
+func (s *Service) GetUser(ctx hyperion.Context, id string) (err error) {
+    ctx, end := ctx.UseIntercept("Service", "GetUser")
+    defer end(&err)
+
+    // ✅ Direct access to span created by interceptor
+    ctx.Span().SetAttributes(
+        hyperion.String("user_id", id),
+        hyperion.String("service", "UserService"),
+    )
+
+    // Business logic...
+    return nil
+}
+```
+
+**NoOp Safety:**
+
+When using NoOp tracer, `Span()` returns a NoOp span that safely ignores all operations:
+
+```go
+// Works safely with both OTel and NoOp tracers
+ctx.Span().SetAttributes(...)  // NoOp: silently ignored
+ctx.Span().AddEvent("...")      // NoOp: silently ignored
+ctx.Span().RecordError(err)     // NoOp: silently ignored
+```
+
+### 9.5 Usage Pattern
 
 **Service Layer**:
 ```go
@@ -2320,9 +2387,20 @@ ok      github.com/mapoio/hyperion/adapter/viper    0.015s
 | Viper | Config/ConfigWatcher | ✅ Complete | 84.4% | P0 |
 | Zap | Logger | ✅ Complete | 93.9% | P0 |
 | GORM | Database/Executor/UnitOfWork | ✅ Complete | 82.1% | P0 |
-| OTEL | Tracer + Meter | 🔜 Planned | - | P1 |
+| OTEL | Tracer + Meter | ✅ Complete | 85%+ | P0 |
 | Ristretto | Cache | 🔜 Planned | - | P1 |
 | Redis | Cache | 🔜 Planned | - | P1 |
+
+**OTel Adapter Features (v1.38.0)**:
+- ✅ Full OpenTelemetry SDK integration (Tracer + Meter)
+- ✅ Automatic trace correlation in logs (trace_id, span_id)
+- ✅ Exemplar support for metrics → traces navigation
+- ✅ OTLP exporters (gRPC and HTTP)
+- ✅ Batch span processor with configurable limits
+- ✅ Automatic resource detection and enrichment
+- ✅ Runtime metrics collection (go.* metrics)
+- ✅ OTLP logs export via Zap bridge
+- ✅ Context.Span() method for direct span access
 
 ### 14.3 Build & Test Results
 
@@ -2348,20 +2426,20 @@ $ golangci-lint run ./...
 
 ### 14.4 Known Limitations
 
-1. **OpenTelemetry Adapter Missing**: `adapter/otel` not yet implemented
-   - Impact: No distributed tracing and metrics with automatic correlation
-   - Workaround: Use NoOp Tracer and Meter (development), or implement custom adapter
-   - ETA: Epic 3 (Q1 2026)
-
-2. **Cache Adapters Missing**: `adapter/ristretto` and `adapter/redis` not implemented
+1. **Cache Adapters Missing**: `adapter/ristretto` and `adapter/redis` not implemented
    - Impact: No production caching support
    - Workaround: Use NoOp Cache (always miss) or implement custom adapter
-   - ETA: Story 2.3 (Dec 2025)
+   - ETA: v2.3 (Dec 2025)
 
-3. **Automatic Metrics Interceptor**: Not yet provided as built-in
-   - Impact: Manual metric recording required
-   - Workaround: Create custom MetricsInterceptor or record metrics manually
-   - ETA: Epic 3 (Q1 2026)
+2. **Advanced Observability Features**: Sampling strategies and context propagation not yet implemented
+   - Impact: No custom sampling control, single propagation format (W3C TraceContext)
+   - Workaround: Use OTel SDK default sampling, W3C TraceContext is standard
+   - ETA: Epic 6 (Q2 2026)
+
+3. **Web Framework Modules**: `hyperweb` and `hypergrpc` not yet implemented
+   - Impact: Manual middleware setup required for HTTP/gRPC
+   - Workaround: Use standard Gin/gRPC with HyperionMiddleware pattern (see minimal-gin example)
+   - ETA: v2.4 (Q3 2026)
 
 ---
 
@@ -2515,9 +2593,9 @@ func NewMyService(config hyperion.Config) *MyService {
 
 ## 16. Roadmap
 
-### v2.0-2.2 (✅ Current - Core Foundation + Essential Adapters)
+### v2.0-2.2 (✅ Current - Core Foundation + Essential Adapters + Observability)
 
-**Completed (Epic 1 + Epic 2)**:
+**Completed (Epic 1 + Epic 2 + Epic 3)**:
 - [x] Monorepo structure with Go workspace
 - [x] Core interfaces (Logger, Tracer, Meter, Database, Config, Cache, Context, Interceptor)
 - [x] NoOp implementations for all interfaces
@@ -2527,43 +2605,34 @@ func NewMyService(config hyperion.Config) *MyService {
 - [x] Viper adapter (Config + ConfigWatcher) - 84.4% coverage
 - [x] Zap adapter (Logger) - 93.9% coverage
 - [x] GORM adapter (Database + Executor + UnitOfWork) - 82.1% coverage
+- [x] **OpenTelemetry adapter (Tracer + Meter) - 85%+ coverage** ⭐ NEW
+- [x] **Automatic trace correlation in logs (trace_id, span_id)** ⭐ NEW
+- [x] **Exemplar support for Metrics → Traces navigation** ⭐ NEW
+- [x] **OTLP exporters (gRPC and HTTP)** ⭐ NEW
+- [x] **Runtime metrics collection (go.* metrics)** ⭐ NEW
+- [x] **OTLP logs export via Zap bridge** ⭐ NEW
+- [x] **Context.Span() method for direct span access** ⭐ NEW
 - [x] ContextFactory with full dependency injection
 - [x] Comprehensive documentation
+- [x] Complete OTel example application with HyperDX integration
 
-**Status**: ✅ Production Ready
+**Status**: ✅ Production Ready with Full Observability
 
-### v2.3 (🔜 In Progress - Cache & Examples)
+### v2.3 (🔜 Next - Cache & Advanced Examples)
 
 **Target Date**: Dec 2025
 
 **Goals**:
 - [ ] Ristretto adapter (Cache - in-memory)
 - [ ] Redis adapter (Cache - distributed)
-- [ ] Example CRUD application with full observability
+- [ ] Minimal Gin integration example ✅ DONE
 - [ ] Performance benchmarks
+- [ ] Multi-service distributed tracing example
 
 **Deliverables**:
 - Production-ready caching support
-- Complete working example with Gin + GORM + Observability
-- Performance benchmarks
-
-### Epic 3 (🔜 Planned - OpenTelemetry Integration)
-
-**Target Date**: Q1 2026
-
-**Goals**:
-- [ ] OpenTelemetry adapter (Tracer + Meter) with full SDK integration
-- [ ] Automatic trace correlation for Logs/Metrics (via OTel Logs Bridge)
-- [ ] Exemplar support for Metrics → Traces navigation
-- [ ] OTel exporters (Jaeger, Prometheus, OTLP)
-- [ ] Distributed context propagation (Baggage API)
-- [ ] Sampling strategies configuration
-
-**Deliverables**:
-- Full OpenTelemetry SDK integration
-- Automatic Logs ↔ Traces ↔ Metrics correlation
-- Production observability backends support
-- Observability best practices guide
+- Complete working examples with Gin + GORM + Observability
+- Performance benchmarks and optimization guide
 
 ### v2.3 (🔜 Planned - Web Framework)
 

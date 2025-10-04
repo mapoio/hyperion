@@ -30,10 +30,18 @@ var _ hyperion.ContextAwareLogger = (*zapLogger)(nil)
 // Config holds configuration for Zap logger.
 // Fields are ordered for optimal memory alignment.
 type Config struct {
-	FileConfig *FileConfig `mapstructure:"file"`     // File rotation configuration (8 bytes pointer)
-	Level      string      `mapstructure:"level"`    // Log level: debug, info, warn, error, fatal (16 bytes)
-	Encoding   string      `mapstructure:"encoding"` // Encoding format: json or console (16 bytes)
-	Output     string      `mapstructure:"output"`   // Output destination: stdout, stderr, or file path (16 bytes)
+	OtlpConfig *OtlpLogConfig `mapstructure:"otlp"`     // OTLP logs export configuration (8 bytes pointer)
+	FileConfig *FileConfig    `mapstructure:"file"`     // File rotation configuration (8 bytes pointer)
+	Level      string         `mapstructure:"level"`    // Log level: debug, info, warn, error, fatal (16 bytes)
+	Encoding   string         `mapstructure:"encoding"` // Encoding format: json or console (16 bytes)
+	Output     string         `mapstructure:"output"`   // Output destination: stdout, stderr, or file path (16 bytes)
+}
+
+// OtlpLogConfig holds OTLP logs export configuration.
+type OtlpLogConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`      // Whether to enable OTLP logs export
+	Endpoint    string `mapstructure:"endpoint"`     // OTLP gRPC endpoint (e.g., "localhost:4317")
+	ServiceName string `mapstructure:"service_name"` // Service name for logs
 }
 
 // FileConfig holds file rotation configuration.
@@ -97,13 +105,16 @@ func NewZapLogger(cfg hyperion.Config) (hyperion.Logger, error) {
 		return nil, fmt.Errorf("unsupported encoding: %s", logCfg.Encoding)
 	}
 
-	// Configure output writer
-	var writer io.Writer
+	// Configure output writers
+	var writers []zapcore.WriteSyncer
+
+	// Add standard output writer
+	var stdWriter io.Writer
 	switch logCfg.Output {
 	case "stdout":
-		writer = os.Stdout
+		stdWriter = os.Stdout
 	case "stderr":
-		writer = os.Stderr
+		stdWriter = os.Stderr
 	default:
 		// Treat as file path
 		if logCfg.FileConfig == nil {
@@ -119,7 +130,7 @@ func NewZapLogger(cfg hyperion.Config) (hyperion.Logger, error) {
 			logCfg.FileConfig.Path = logCfg.Output
 		}
 
-		writer = &lumberjack.Logger{
+		stdWriter = &lumberjack.Logger{
 			Filename:   logCfg.FileConfig.Path,
 			MaxSize:    logCfg.FileConfig.MaxSize,
 			MaxBackups: logCfg.FileConfig.MaxBackups,
@@ -127,11 +138,30 @@ func NewZapLogger(cfg hyperion.Config) (hyperion.Logger, error) {
 			Compress:   logCfg.FileConfig.Compress,
 		}
 	}
+	writers = append(writers, zapcore.AddSync(stdWriter))
 
-	// Build core
+	// Add OTLP logs exporter if enabled
+	var otlpBridge *otlpLogBridge
+	if logCfg.OtlpConfig != nil && logCfg.OtlpConfig.Enabled {
+		var err error
+		otlpBridge, err = createOtlpLogBridge(logCfg.OtlpConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OTLP log bridge: %w", err)
+		}
+		writers = append(writers, otlpBridge)
+	}
+
+	// Build core with multi-writer
+	var coreWriter zapcore.WriteSyncer
+	if len(writers) == 1 {
+		coreWriter = writers[0]
+	} else {
+		coreWriter = zapcore.NewMultiWriteSyncer(writers...)
+	}
+
 	core := zapcore.NewCore(
 		encoder,
-		zapcore.AddSync(writer),
+		coreWriter,
 		atom,
 	)
 

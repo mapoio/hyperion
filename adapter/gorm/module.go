@@ -37,11 +37,13 @@ import (
 //	  max_open_conns: 25
 //	  max_idle_conns: 5
 var Module = fx.Module("hyperion.adapter.gorm",
-	fx.Provide(
+	fx.Decorate(
 		fx.Annotate(
 			NewGormDatabase,
 			fx.As(new(hyperion.Database)),
 		),
+	),
+	fx.Provide(
 		fx.Annotate(
 			NewGormUnitOfWork,
 			fx.As(new(hyperion.UnitOfWork)),

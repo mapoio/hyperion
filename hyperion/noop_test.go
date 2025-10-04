@@ -128,10 +128,11 @@ func TestNoOpConfig(t *testing.T) {
 // TestNoOpTracer tests all NoOp Tracer methods
 func TestNoOpTracer(t *testing.T) {
 	tracer := hyperion.NewNoOpTracer()
-	ctx := context.Background()
+	logger := hyperion.NewNoOpLogger()
+	hctx := hyperion.New(context.Background(), logger, nil, tracer, nil)
 
 	// Test Start
-	newCtx, span := tracer.Start(ctx, "test-span")
+	newCtx, span := tracer.Start(hctx, "test-span")
 	if newCtx == nil {
 		t.Error("Start should return a context")
 	}

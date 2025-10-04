@@ -1,8 +1,11 @@
-go 1.24
+go 1.24.0
 
 use (
 	./adapter/gorm
+	./adapter/otel
 	./adapter/viper
 	./adapter/zap
+	./example/minimal-gin
+	./example/otel
 	./hyperion
 )

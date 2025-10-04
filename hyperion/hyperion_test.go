@@ -41,10 +41,11 @@ func TestCoreModule(t *testing.T) {
 			logger.Info("test message", "key", "value")
 
 			// Test Tracer
-			ctx, span := tracer.Start(context.Background(), "test-span")
+			hctx := hyperion.New(context.Background(), logger, nil, tracer, nil)
+			newCtx, span := tracer.Start(hctx, "test-span")
 			span.SetAttributes(hyperion.String("test", "value"))
 			span.End()
-			_ = ctx
+			_ = newCtx
 
 			// Test Config
 			value := cfg.GetString("nonexistent")

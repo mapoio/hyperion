@@ -1,0 +1,14 @@
+# Minimal Gin Example Configuration
+
+app:
+  name: minimal-gin-example
+  env: development
+
+server:
+  host: localhost
+  port: 8080
+
+log:
+  level: info
+  encoding: console  # Use "json" for production
+  output: stdout

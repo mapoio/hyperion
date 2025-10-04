@@ -11,14 +11,15 @@ import (
 // Usage:
 //
 //	app := fx.New(
+//	    hyperion.CoreModule,
 //	    viper.Module,  // Provides Config
-//	    zap.Module,    // Provides Logger
+//	    zap.Module,    // Decorates Logger with Zap
 //	    fx.Invoke(func(logger hyperion.Logger) {
 //	        logger.Info("application started", "version", "1.0.0")
 //	    }),
 //	)
 var Module = fx.Module("hyperion.adapter.zap",
-	fx.Provide(
+	fx.Decorate(
 		fx.Annotate(
 			NewZapLogger,
 			fx.As(new(hyperion.Logger)),

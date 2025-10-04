@@ -133,6 +133,147 @@ func (s *Service) GetUser(ctx hyperion.Context, id string) (err error) {
 }
 ```
 
+### Exemplar Mechanism Deep Dive
+
+**What are Exemplars?**
+
+Exemplars are sample data points attached to metric observations that link metrics back to the specific trace that generated them. This creates a bidirectional correlation:
+- **Metrics → Traces**: Click on a metric spike to see example traces
+- **Traces → Metrics**: See which metrics were recorded during trace execution
+
+**How Exemplars Work in Hyperion**:
+
+1. **Automatic Extraction**: When you pass `hyperion.Context` to metric recording methods, the OTel adapter automatically extracts the current trace context:
+
+```go
+// Inside adapter/otel/meter.go
+func (c *otelCounter) Add(ctx context.Context, value int64, attrs ...hyperion.Attribute) {
+    // OTel SDK automatically:
+    // 1. Checks if ctx contains a span context
+    // 2. If yes, attaches trace_id + span_id as exemplar
+    // 3. Records the exemplar with timestamp
+    c.counter.Add(ctx, value, metric.WithAttributes(convertAttributes(attrs)...))
+}
+```
+
+2. **Storage Format**: Exemplars are stored alongside metric data points in Prometheus/Mimir format:
+
+```
+# Metric without exemplar (no context)
+http_requests_total{method="GET",path="/users"} 1523
+
+# Metric with exemplar (with context) - shows example trace
+http_requests_total{method="GET",path="/users"} 1523 # {trace_id="4bf92f3577b34da6a3ce929d0e0e4736",span_id="00f067aa0ba902b7"} 1.0 1672531200000
+```
+
+3. **Sampling Strategy**: Not every metric observation needs an exemplar (would explode storage). OTel SDK automatically samples exemplars:
+   - **Default**: Last exemplar per time bucket (e.g., last trace per minute)
+   - **Configurable**: Can configure to keep exemplars for high-latency requests, errors, etc.
+
+**Use Cases**:
+
+**Use Case 1: Debug Latency Spikes**
+```
+1. Notice p99 latency spike in Grafana dashboard
+2. Click on the spike → See exemplar trace ID
+3. Open trace in Jaeger/Tempo
+4. See exactly what caused the slow request
+```
+
+**Use Case 2: Debug Error Rate Increase**
+```
+1. Notice error rate increase in metrics
+2. Find exemplar trace for failed request
+3. See error stack trace and context
+4. Identify root cause
+```
+
+**Use Case 3: Capacity Planning**
+```
+1. Notice high request count on specific endpoint
+2. Click exemplar to see typical trace
+3. Analyze resource usage per request
+4. Calculate infrastructure needs
+```
+
+**Configuration in Hyperion**:
+
+```go
+// Example: Configure exemplar sampling (future feature in Epic 6)
+otel.Module,  // Uses OTel SDK default exemplar configuration
+
+// Default behavior:
+// - Automatically enabled for all metrics when context is passed
+// - Samples 1 exemplar per time series per collection interval
+// - Stores trace_id, span_id, and timestamp
+```
+
+**Visualization in Grafana**:
+
+When viewing metrics in Grafana with Tempo/Jaeger as trace datasource:
+1. Metrics show as usual (counter, histogram, etc.)
+2. Data points with exemplars show a **special icon** (usually a diamond)
+3. Click the icon → Opens trace in Tempo/Jaeger in a new panel
+4. Navigate between metrics and traces seamlessly
+
+**Backend Requirements**:
+
+For exemplars to work, you need:
+- ✅ **Metrics Backend**: Prometheus (>= 2.26), Mimir, or OTLP-compatible collector
+- ✅ **Traces Backend**: Tempo, Jaeger, or any OTLP trace backend
+- ✅ **Visualization**: Grafana (>= 7.5) with both datasources configured
+- ✅ **Exporter**: OTLP exporter with exemplar support (included in `adapter/otel`)
+
+**Performance Impact**:
+
+Exemplars have minimal overhead:
+- **Storage**: ~50 bytes per exemplar (trace_id + span_id + timestamp)
+- **CPU**: Negligible (< 0.1% increase)
+- **Network**: Only sampled exemplars exported (default: 1 per metric per interval)
+
+**Example: End-to-End Flow**
+
+```go
+// 1. Service method with tracing
+func (s *OrderService) CreateOrder(ctx hyperion.Context, req *CreateOrderRequest) (err error) {
+    // UseIntercept creates span with trace_id
+    ctx, end := ctx.UseIntercept("OrderService", "CreateOrder")
+    defer end(&err)
+
+    // 2. Record metrics with context (automatic exemplar)
+    orderCounter := ctx.Meter().Counter("orders.created")
+    orderCounter.Add(ctx, 1,
+        hyperion.String("payment_method", req.PaymentMethod),
+    )
+
+    // 3. Record latency with exemplar
+    start := time.Now()
+    result, err := s.createOrder(ctx, req)
+    duration := time.Since(start)
+
+    latencyHistogram := ctx.Meter().Histogram("orders.creation_latency")
+    latencyHistogram.Record(ctx, float64(duration.Milliseconds()))
+
+    return err
+}
+
+// Result in Prometheus:
+// orders_created_total{payment_method="credit_card"} 1523
+//   # {trace_id="4bf92f3577b34da6a3ce929d0e0e4736"} 1.0 1672531200000
+
+// In Grafana:
+// 1. View orders_created_total metric
+// 2. See spike at timestamp 1672531200000
+// 3. Click exemplar diamond icon
+// 4. Opens trace "4bf92f3577b34da6a3ce929d0e0e4736" in Tempo
+// 5. See full CreateOrder execution with all spans
+```
+
+**See Also**:
+- [OpenTelemetry Metrics Exemplars Spec](https://opentelemetry.io/docs/specs/otel/metrics/data-model/#exemplars)
+- [Prometheus Exemplars Documentation](https://prometheus.io/docs/prometheus/latest/feature_flags/#exemplars-storage)
+- [Grafana Exemplars Guide](https://grafana.com/docs/grafana/latest/fundamentals/exemplars/)
+
 ## Architecture: How They Work Together
 
 ### Correlation Flow

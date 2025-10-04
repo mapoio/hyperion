@@ -13,11 +13,11 @@ import (
 //
 //	fx.New(
 //	    hyperion.CoreModule,
-//	    viper.Module,  // Provides hyperion.Config
+//	    viper.Module,  // Decorates hyperion.Config with Viper
 //	    myapp.Module,
 //	).Run()
 var Module = fx.Module("hyperion.adapter.viper",
-	fx.Provide(
+	fx.Decorate(
 		fx.Annotate(
 			NewProviderFromEnv,
 			fx.As(new(hyperion.Config)),
