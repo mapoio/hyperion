@@ -93,4 +93,3 @@ func WithRegistry(registry InterceptorRegistry) FactoryOption {
 		f.registry = registry
 	}
 }
-
