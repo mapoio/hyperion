@@ -31,6 +31,6 @@ package hyperion
 // Returns:
 //   - Updated context with all interceptors applied
 //   - End function that must be called to finish the span
-func StartSpan(ctx Context, spanName string) (Context, func(*error)) {
+func StartSpan(ctx Context, spanName string) (updatedCtx Context, endFunc func(*error)) {
 	return ctx.UseIntercept(spanName)
 }
