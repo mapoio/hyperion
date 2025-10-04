@@ -19,7 +19,7 @@ func TestOtelMeter_Counter(t *testing.T) {
 		metric.WithReader(reader),
 	)
 
-	meter := &otelMeter{
+	meter := &OtelMeter{
 		meter: mp.Meter("test"),
 	}
 
@@ -64,7 +64,7 @@ func TestOtelMeter_Histogram(t *testing.T) {
 		metric.WithReader(reader),
 	)
 
-	meter := &otelMeter{
+	meter := &OtelMeter{
 		meter: mp.Meter("test"),
 	}
 
@@ -110,7 +110,7 @@ func TestOtelMeter_Gauge(t *testing.T) {
 		metric.WithReader(reader),
 	)
 
-	meter := &otelMeter{
+	meter := &OtelMeter{
 		meter: mp.Meter("test"),
 	}
 
@@ -155,7 +155,7 @@ func TestOtelMeter_UpDownCounter(t *testing.T) {
 		metric.WithReader(reader),
 	)
 
-	meter := &otelMeter{
+	meter := &OtelMeter{
 		meter: mp.Meter("test"),
 	}
 
@@ -201,7 +201,7 @@ func TestOtelMeter_MultipleMetrics(t *testing.T) {
 		metric.WithReader(reader),
 	)
 
-	meter := &otelMeter{
+	meter := &OtelMeter{
 		meter: mp.Meter("test"),
 	}
 

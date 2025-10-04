@@ -44,7 +44,3 @@ CLAUDE.md
 .bmad-core/
 .claude
 bin/
-
-# Debug and experimental test files
-test_*.go
-**/test_*.go

@@ -8,14 +8,23 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// otelTracer wraps an OpenTelemetry tracer to implement hyperion.Tracer.
-type otelTracer struct {
+// OtelTracer wraps an OpenTelemetry tracer to implement hyperion.Tracer.
+// It is exported to allow applications to access the underlying TracerProvider
+// for integrating OTel auto-instrumentation libraries.
+type OtelTracer struct {
 	tracer   trace.Tracer
 	provider trace.TracerProvider
 }
 
+// TracerProvider returns the underlying OpenTelemetry TracerProvider.
+// This allows applications to integrate OTel auto-instrumentation libraries
+// (e.g., otelhttp, otelgrpc) that require access to the TracerProvider.
+func (t *OtelTracer) TracerProvider() trace.TracerProvider {
+	return t.provider
+}
+
 // Start creates a new span and returns a context with the span and the span itself.
-func (t *otelTracer) Start(hctx hyperion.Context, spanName string, opts ...hyperion.SpanOption) (hyperion.Context, hyperion.Span) {
+func (t *OtelTracer) Start(hctx hyperion.Context, spanName string, opts ...hyperion.SpanOption) (hyperion.Context, hyperion.Span) {
 	otelOpts := convertSpanOpts(opts...)
 	// Extract the underlying context.Context from hyperion.Context
 	// This is critical: OTel needs the standard context.Context to store span context
@@ -32,7 +41,7 @@ func (t *otelTracer) Start(hctx hyperion.Context, spanName string, opts ...hyper
 }
 
 // Shutdown flushes any pending traces and shuts down the tracer provider.
-func (t *otelTracer) Shutdown(ctx context.Context) error {
+func (t *OtelTracer) Shutdown(ctx context.Context) error {
 	if sp, ok := t.provider.(interface{ Shutdown(context.Context) error }); ok {
 		return sp.Shutdown(ctx)
 	}

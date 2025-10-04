@@ -8,31 +8,56 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mapoio/hyperion"
-	"github.com/mapoio/hyperion/adapter/otel"
+	hyperotel "github.com/mapoio/hyperion/adapter/otel"
 	"github.com/mapoio/hyperion/adapter/viper"
 	"github.com/mapoio/hyperion/adapter/zap"
 	"github.com/mapoio/hyperion/example/otel/internal/services"
+	"github.com/mapoio/hyperion/example/otel/internal/telemetry"
+	"go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/fx"
 )
 
 func main() {
 	fx.New(
-		// Core configuration
-		viper.Module,
+		// ============================================================
+		// STEP 1: Initialize OpenTelemetry SDK (Application Layer)
+		// ============================================================
+		// This is where the application has FULL CONTROL over OTel configuration.
+		// The SDK initialization happens ONCE and is shared across all components.
+		telemetry.Module,            // OTel SDK with TracerProvider & MeterProvider
+		telemetry.RuntimeMetricsModule, // Automatic Go runtime metrics (CPU, Memory, GC)
+		telemetry.HTTPInstrumentationModule, // Automatic HTTP tracing
 
-		// Observability adapters
-		otel.Module, // Tracer + Meter
-		zap.Module,  // Logger with OTel trace context injection
+		// ============================================================
+		// STEP 2: Integrate Hyperion Adapters with OTel SDK
+		// ============================================================
+		// Hyperion adapters use the OTel SDK initialized in Step 1.
+		// They provide hyperion.Tracer and hyperion.Meter interfaces.
+		fx.Provide(
+			func(tp *sdktrace.TracerProvider) hyperion.Tracer {
+				return hyperotel.NewOtelTracerFromProvider(tp, "hyperion-otel-example")
+			},
+		),
+		fx.Provide(
+			func(mp *metric.MeterProvider) hyperion.Meter {
+				return hyperotel.NewOtelMeterFromProvider(mp, "hyperion-otel-example")
+			},
+		),
 
-		// Default implementations for missing dependencies
+		// ============================================================
+		// STEP 3: Other Hyperion Dependencies
+		// ============================================================
+		viper.Module, // Configuration
+		zap.Module,   // Logger with OTel trace context injection
+
 		fx.Provide(hyperion.NewNoOpDatabase),
 		fx.Provide(hyperion.NewNoOpCache),
 
-		// Register TracingInterceptor as a direct dependency
+		// Register TracingInterceptor
 		fx.Provide(hyperion.NewTracingInterceptor),
 
-		// Register ContextFactory with DIRECT dependency on TracingInterceptor
-		// This ensures TracingInterceptor is created BEFORE ContextFactory
+		// Register ContextFactory
 		fx.Provide(
 			func(
 				logger hyperion.Logger,
@@ -41,14 +66,10 @@ func main() {
 				meter hyperion.Meter,
 				tracingInterceptor *hyperion.TracingInterceptor,
 			) hyperion.ContextFactory {
-				// Convert TracingInterceptor to Interceptor interface
 				interceptors := []hyperion.Interceptor{tracingInterceptor}
-
-				// DEBUG: Log interceptor count
 				logger.Info("🔍 [DEBUG] ContextFactory provider called",
 					"interceptors_count", len(interceptors),
 				)
-
 				return hyperion.NewContextFactory(
 					logger,
 					tracer,
@@ -59,10 +80,14 @@ func main() {
 			},
 		),
 
-		// Business services
+		// ============================================================
+		// STEP 4: Business Logic
+		// ============================================================
 		services.Module,
 
-		// HTTP server
+		// ============================================================
+		// STEP 5: HTTP Server
+		// ============================================================
 		fx.Provide(NewHTTPServer),
 		fx.Invoke(RegisterRoutes),
 		fx.Invoke(StartServer),

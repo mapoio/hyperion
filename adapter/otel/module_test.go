@@ -77,7 +77,7 @@ func TestNewOtelTracer(t *testing.T) {
 				span.End()
 
 				// Shutdown via type assertion
-				if ot, ok := tracer.(*otelTracer); ok {
+				if ot, ok := tracer.(*OtelTracer); ok {
 					if err := ot.Shutdown(ctx); err != nil {
 						t.Errorf("failed to shutdown tracer: %v", err)
 					}

@@ -28,7 +28,7 @@ func TestTracerLoggerIntegration(t *testing.T) {
 		trace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test-integration"),
 		provider: tp,
 	}
@@ -110,7 +110,7 @@ func TestTraceContextExtraction(t *testing.T) {
 		trace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test-extraction"),
 		provider: tp,
 	}
@@ -185,7 +185,7 @@ func TestMultipleSpansTraceContext(t *testing.T) {
 		trace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test-multi-span"),
 		provider: tp,
 	}

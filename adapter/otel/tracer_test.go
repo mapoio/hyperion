@@ -21,7 +21,7 @@ func TestOtelTracer_Start(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -71,7 +71,7 @@ func TestOtelTracer_StartWithAttributes(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -119,7 +119,7 @@ func TestOtelSpan_RecordError(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -168,7 +168,7 @@ func TestOtelSpan_AddEvent(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -216,7 +216,7 @@ func TestOtelSpanContext(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
@@ -260,7 +260,7 @@ func TestOtelTracer_Shutdown(t *testing.T) {
 		sdktrace.WithSyncer(exporter),
 	)
 
-	tracer := &otelTracer{
+	tracer := &OtelTracer{
 		tracer:   tp.Tracer("test"),
 		provider: tp,
 	}
