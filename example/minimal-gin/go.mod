@@ -3,7 +3,7 @@ module github.com/mapoio/hyperion/example/minimal-gin
 go 1.24.0
 
 require (
-	github.com/gin-gonic/gin v1.10.0
+	github.com/gin-gonic/gin v1.11.0
 	github.com/mapoio/hyperion v0.2.0
 	github.com/mapoio/hyperion/adapter/viper v0.0.0
 	github.com/mapoio/hyperion/adapter/zap v0.0.0
